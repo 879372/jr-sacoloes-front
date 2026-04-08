@@ -12,7 +12,10 @@ import {
   Search,
   ExternalLink,
   Check,
-  Package
+  Package,
+  CheckCircle2,
+  Archive,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,11 +35,31 @@ const STATUS_MAP: Record<string, { label: string, color: string }> = {
   PENDENTE: { label: 'Pendente', color: 'badge-yellow' },
   RECEBIDA: { label: 'Recebida', color: 'badge-green' },
   CANCELADA: { label: 'Cancelada', color: 'badge-red' },
+  MDE: { label: 'MD-e', color: 'badge-purple' },
 };
+
+const formatCurrency = (val: any) => {
+  return Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+interface NFeRecebida {
+  id: string;
+  chave_nfe: string;
+  nome_emitente: string;
+  documento_emitente: string;
+  valor_total: string;
+  data_emissao: string;
+  manifestacao_destinatario: string;
+  manifestacao_display?: string;
+  situacao: string;
+  nota_compra: any;
+}
 
 export default function Compras() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'PENDENTE' | 'RECEBIDA' | 'CANCELADA' | 'MDE'>('PENDENTE');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [form, setForm] = useState({ 
     numero_nf: '', 
     fornecedor: '', 
@@ -46,10 +69,14 @@ export default function Compras() {
     observacoes: '' 
   });
 
-  const { data: notas = [], isLoading } = useQuery<NotaCompra[]>({
-    queryKey: ['notas-compra'],
+  const { data: items = [], isLoading, refetch: refetchItems } = useQuery<any[]>({
+    queryKey: ['compras-data', activeTab],
     queryFn: async () => {
-      const resp = await api.get('/notas-compra/');
+      if (activeTab === 'MDE') {
+        const resp = await api.get('/fiscal/recebidas/');
+        return resp.data.results || resp.data;
+      }
+      const resp = await api.get('/notas-compra/', { params: { status: activeTab } });
       return resp.data.results || resp.data;
     },
   });
@@ -76,6 +103,47 @@ export default function Compras() {
     }
   });
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const resp = await api.post('/fiscal/recebidas/sincronizar/');
+      toast.success(`Sincronização concluída: ${resp.data.total_novas} novas notas encontradas.`);
+      refetchItems();
+    } catch (err) {
+      toast.error('Erro ao sincronizar com o portal Sefaz.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleManifestar = async (n: NFeRecebida) => {
+    if (!window.confirm('Deseja registrar "Ciência da Operação"? Isso permitirá baixar o XML completo.')) return;
+    setIsSyncing(true);
+    try {
+      await api.post(`/fiscal/recebidas/${n.id}/manifestar_ciencia/`);
+      toast.success('Ciência registrada! O XML ficará disponível em instantes.');
+      refetchItems();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao manifestar.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleImportar = async (n: NFeRecebida) => {
+    setIsSyncing(true);
+    try {
+      await api.post(`/fiscal/recebidas/${n.id}/importar/`);
+      toast.success('Nota importada com sucesso para os lançamentos!');
+      setActiveTab('PENDENTE');
+      queryClient.invalidateQueries({ queryKey: ['compras-data'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao importar. Verifique se o XML já está disponível.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     mutation.mutate({ 
@@ -99,24 +167,126 @@ export default function Compras() {
         </button>
       </div>
 
+      <div style={{ marginBottom: 20 }}>
+        <div className="tabs-container">
+          <button 
+            className={`tab-item ${activeTab === 'PENDENTE' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('PENDENTE')}
+          >
+            Lançamentos (Pendentes)
+          </button>
+          <button 
+            className={`tab-item ${activeTab === 'RECEBIDA' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('RECEBIDA')}
+          >
+            Compras Recebidas
+          </button>
+          <button 
+            className={`tab-item ${activeTab === 'CANCELADA' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('CANCELADA')}
+          >
+            Canceladas
+          </button>
+          <button 
+            className={`tab-item ${activeTab === 'MDE' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('MDE')}
+          >
+            MD-e (Portal Sefaz)
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'MDE' && (
+        <div className="card" style={{ borderLeft: '4px solid var(--accent-purple)', padding: '24px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Sincronização MDe</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Consulte notas fiscais emitidas por fornecedores contra seu CNPJ.</p>
+            </div>
+            <button className="btn btn-primary" onClick={handleSync} disabled={isSyncing}>
+              <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+              Sincronizar com Sefaz
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: 24, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(59, 130, 246, 0.05)', borderColor: 'rgba(59, 130, 246, 0.2)' }}>
         <Info size={18} className="text-accent" style={{ color: 'var(--accent)' }} />
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          <strong>Próximo passo:</strong> Implementaremos a importação automática via XML/Sefaz. Por enquanto, utilize o lançamento manual.
+          {activeTab === 'PENDENTE' 
+            ? 'Notas lançadas manualmente aguardando o recebimento físico para entrada no estoque.' 
+            : activeTab === 'RECEBIDA' 
+              ? 'Histórico de compras confirmadas. O estoque destes produtos já foi atualizado.'
+              : activeTab === 'MDE'
+                ? 'Notas de terceiros localizadas na Sefaz. Dê "Ciência" para baixar e então "Importar" para lançar no sistema.'
+                : 'Notas fiscais canceladas ou estornadas.'}
         </p>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {isLoading ? (
-          <div className="loading" style={{ height: 300 }}>Carregando histórico de compras...</div>
-        ) : notas.length === 0 ? (
+          <div className="loading" style={{ height: 300 }}>Carregando dados...</div>
+        ) : items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60 }}>
             <div style={{ padding: 20, background: 'rgba(255,255,255,0.02)', borderRadius: '50%', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <FileText size={40} style={{ color: 'var(--text-muted)' }} />
             </div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Nenhuma nota fiscal</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Comece registrando sua primeira compra de fornecedor.</p>
-            <button className="btn btn-ghost" onClick={() => setShowModal(true)}>+ Nova NF</button>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Vazio</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Nenhum registro encontrado nesta categoria.</p>
+          </div>
+        ) : activeTab === 'MDE' ? (
+          <div className="table-wrapper">
+             <table className="table">
+                <thead>
+                  <tr>
+                    <th>Emitente</th>
+                    <th>Chave de Acesso</th>
+                    <th>Valor Total</th>
+                    <th>Emissao</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((n: NFeRecebida) => (
+                    <tr key={n.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{n.nome_emitente}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{n.documento_emitente}</div>
+                      </td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{n.chave_nfe}</td>
+                      <td style={{ color: 'var(--accent-green)', fontWeight: 700 }}>R$ {formatCurrency(n.valor_total)}</td>
+                      <td>{new Date(n.data_emissao).toLocaleDateString('pt-BR')}</td>
+                      <td>
+                         <span className={`badge ${n.manifestacao_destinatario === 'nulo' ? 'badge-blue' : 'badge-green'}`}>
+                           {n.manifestacao_display || n.manifestacao_destinatario}
+                         </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {n.manifestacao_destinatario === 'nulo' ? (
+                            <button className="btn btn-sm btn-ghost" onClick={() => handleManifestar(n)} title="Dar Ciência">
+                              <CheckCircle2 size={14} /> Ciência
+                            </button>
+                          ) : (
+                            <button 
+                              className="btn btn-sm btn-ghost" 
+                              style={{ color: 'var(--accent)' }} 
+                              onClick={() => handleImportar(n)} 
+                              title="Importar para Lançamentos"
+                              disabled={!!n.nota_compra}
+                            >
+                              <Archive size={14} />
+                              {n.nota_compra ? 'Importado' : 'Importar'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+             </table>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -133,7 +303,7 @@ export default function Compras() {
                 </tr>
               </thead>
               <tbody>
-                {notas.map(n => (
+                {items.map((n: NotaCompra) => (
                   <tr key={n.id}>
                     <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{n.numero_nf || 'S/N'}</td>
                     <td>
@@ -143,7 +313,7 @@ export default function Compras() {
                     <td><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={12} /> {n.data_emissao || '—'}</div></td>
                     <td>{new Date(n.data_entrada).toLocaleDateString('pt-BR')}</td>
                     <td style={{ color: 'var(--accent-green)', fontWeight: 700 }}>
-                      R$ {Number(n.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {formatCurrency(n.valor_total)}
                     </td>
                     <td>
                       <span className={`badge ${STATUS_MAP[n.status]?.color || 'badge-blue'}`}>
