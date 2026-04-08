@@ -10,6 +10,30 @@ const api = axios.create({
   },
 });
 
+// Helper to extract a friendly error message from complex API responses
+const extractErrorMessage = (data: any): string => {
+  if (typeof data === 'string') return data;
+  
+  // Handle Focus NFe / DRF style: { "message": { "field": ["error"] } }
+  if (data?.message && typeof data.message === 'object') {
+    const messages = Object.values(data.message).flat();
+    return messages.join(' ') || 'Dados inválidos';
+  }
+  
+  // Handle { "error": "message" }
+  if (data?.error && typeof data.error === 'string') return data.error;
+  
+  // Handle { "detail": "message" }
+  if (data?.detail && typeof data.detail === 'string') return data.detail;
+
+  // Handle { "non_field_errors": ["message"] }
+  if (data?.non_field_errors && Array.isArray(data.non_field_errors)) {
+    return data.non_field_errors.join(' ');
+  }
+
+  return 'Erro na comunicação com o servidor';
+};
+
 // Request interceptor: injects access token if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
@@ -48,16 +72,12 @@ api.interceptors.response.use(
     }
 
     // 2. Global Error Feedback (Toasts)
-    // Ignore if it was a 401 that is being handled, or if it's a "silent" request
     if (error.response?.status !== 401) {
-      const message = error.response?.data?.error || 
-                      error.response?.data?.detail || 
-                      error.response?.data?.message || 
-                      'Erro na comunicação com o servidor';
+      const message = extractErrorMessage(error.response?.data);
       
       toast.error(message, {
-        description: 'Verifique sua conexão ou contate o suporte.',
-        duration: 4000,
+        description: 'Verifique os dados ou contate o suporte.',
+        duration: 5000,
       });
     }
 
