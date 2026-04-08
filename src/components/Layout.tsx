@@ -13,11 +13,13 @@ import {
   LogOut,
   User,
   Menu,
-  X
+  X,
+  History
 } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', Icon: LayoutDashboard, to: '/dashboard', section: 'PRINCIPAL' },
+  { label: 'Histórico Vendas', Icon: History, to: '/vendas', section: null },
   { label: 'PDV / Caixa', Icon: ShoppingCart, to: '/pdv', section: null, external: true },
   { label: 'Produtos', Icon: Package, to: '/produtos', section: 'CADASTROS' },
   { label: 'Clientes', Icon: Users, to: '/clientes', section: null },

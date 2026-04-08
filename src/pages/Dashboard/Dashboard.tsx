@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { 
   Package, 
-  Users, 
   ShoppingCart, 
   TrendingUp, 
   ArrowRight,
@@ -171,7 +170,7 @@ export default function Dashboard() {
                   }}
                 />
                 <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                  {stats?.grafico_vendas?.map((entry: any, index: number) => (
+                  {stats?.grafico_vendas?.map((_: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={index === 6 ? 'var(--accent)' : 'rgba(59, 130, 246, 0.4)'} />
                   ))}
                 </Bar>
@@ -221,6 +220,13 @@ export default function Dashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <ShoppingCart size={18} />
                 <span>Abrir Novo PDV / Caixa</span>
+              </div>
+              <ArrowRight size={16} />
+            </NavLink>
+            <NavLink to="/vendas" className="btn btn-ghost" style={{ padding: '14px', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <History size={18} />
+                <span>Ver Histórico de Vendas</span>
               </div>
               <ArrowRight size={16} />
             </NavLink>

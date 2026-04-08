@@ -20,7 +20,7 @@ import {
   Trash2,
   Lock
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Produto, ItemCarrinho, Sessao, Venda, Pagamento } from './types';
 import CashOpsModal from './CashOpsModal';
 
@@ -37,8 +37,13 @@ import { toast } from 'sonner';
 export default function PDV() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const resumeVendaId = searchParams.get('venda_id');
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState<Produto[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isAdding, setIsAdding] = useState(false);
+  const [qtyMultiplier, setQtyMultiplier] = useState(1);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>(() => {
     const saved = localStorage.getItem('pdv_cart');
     return saved ? JSON.parse(saved) : [];
@@ -94,9 +99,21 @@ export default function PDV() {
 
   // 2. Fetch Active Sale for Session
   const { data: vendaAberta } = useQuery({
-    queryKey: ['venda-aberta', sessao?.id],
+    queryKey: ['venda-aberta', sessao?.id, resumeVendaId],
     queryFn: async () => {
       if (!sessao) return null;
+      
+      // Se houver um ID específico para retomar
+      if (resumeVendaId) {
+        try {
+          const { data } = await api.get(`/vendas/${resumeVendaId}/`);
+          return data;
+        } catch {
+          toast.error('Não foi possível carregar a venda solicitada.');
+        }
+      }
+
+      // Fallback: carregar a primeira venda aberta da sessão
       const { data } = await api.get('/vendas/', { params: { sessao: sessao.id, status: 'EM_ABERTO' } });
       const results = data.results || data;
       return results.length > 0 ? results[0] : null;
@@ -247,47 +264,102 @@ export default function PDV() {
     }
   };
 
+  const handleAdicionarItem = useCallback(async (produto: Produto, qtyOverride?: number) => {
+    if (isAdding) return;
+    setIsAdding(true);
+    
+    try {
+      let currentVenda = venda;
+      if (!currentVenda && sessao) {
+         const resp = await criarVendaMutation.mutateAsync(sessao.id);
+         currentVenda = resp.data;
+         setVenda(currentVenda);
+      }
+      
+      const quantityToAdd = qtyOverride || qtyMultiplier || 1;
+
+      if (currentVenda) {
+          await adicionarItemMutation.mutateAsync({ 
+            vendaId: currentVenda.id, 
+            produto, 
+            qty: quantityToAdd 
+          });
+
+          setCarrinho(prev => {
+              const idx = prev.findIndex(i => i.produto_id === produto.id);
+              const preco = Number(produto.preco_venda);
+              if (idx >= 0) {
+                const novo = [...prev];
+                const novaQty = novo[idx].quantidade + quantityToAdd;
+                novo[idx] = { 
+                  ...novo[idx], 
+                  quantidade: novaQty, 
+                  subtotal: novaQty * novo[idx].preco_unitario 
+                };
+                return novo;
+              }
+              return [...prev, {
+                produto_id: produto.id,
+                nome: produto.nome,
+                quantidade: quantityToAdd,
+                preco_unitario: preco,
+                subtotal: preco * quantityToAdd,
+                unidade: produto.unidade_medida
+              }];
+          });
+          
+          setBusca('');
+          setResultados([]);
+          setSelectedIndex(0);
+          setQtyMultiplier(1);
+          buscaRef.current?.focus();
+      }
+    } catch (err) {
+      toast.error('Erro ao adicionar item.');
+    } finally {
+      setIsAdding(false);
+    }
+  }, [isAdding, venda, sessao, qtyMultiplier, total]);
+
   const handleBusca = useCallback(async (q: string) => {
     setBusca(q);
-    if (!q.trim()) { setResultados([]); return; }
-    try {
-      const { data } = await api.get('/produtos/busca-pdv/', { params: { q } });
-      setResultados(data);
-    } catch { setResultados([]); }
-  }, []);
-
-  const handleAdicionarItem = async (produto: Produto) => {
-    let currentVenda = venda;
-    if (!currentVenda && sessao) {
-       const resp = await criarVendaMutation.mutateAsync(sessao.id);
-       currentVenda = resp.data;
-       setVenda(currentVenda);
+    
+    // Suporte ao padrão QTY*SEARCH (ex: 3*COPO)
+    let searchTerm = q;
+    let multiplier = 1;
+    
+    if (q.includes('*')) {
+      const [qtyPart, ...rest] = q.split('*');
+      const parsedQty = parseFloat(qtyPart);
+      if (!isNaN(parsedQty) && parsedQty > 0) {
+        multiplier = parsedQty;
+        searchTerm = rest.join('*');
+      }
     }
     
-    if (currentVenda) {
-        await adicionarItemMutation.mutateAsync({ vendaId: currentVenda.id, produto, qty: 1 });
-        setCarrinho(prev => {
-            const idx = prev.findIndex(i => i.produto_id === produto.id);
-            const preco = Number(produto.preco_venda);
-            if (idx >= 0) {
-              const novo = [...prev];
-              novo[idx] = { ...novo[idx], quantidade: novo[idx].quantidade + 1, subtotal: (novo[idx].quantidade + 1) * novo[idx].preco_unitario };
-              return novo;
-            }
-            return [...prev, {
-              produto_id: produto.id,
-              nome: produto.nome,
-              quantidade: 1,
-              preco_unitario: preco,
-              subtotal: preco,
-              unidade: produto.unidade_medida
-            }];
-        });
-        setBusca('');
-        setResultados([]);
-        buscaRef.current?.focus();
+    searchTerm = searchTerm.trim();
+    setQtyMultiplier(multiplier);
+
+    if (!searchTerm) { 
+      setResultados([]); 
+      setSelectedIndex(0);
+      return; 
     }
-  };
+
+    try {
+      const { data } = await api.get('/produtos/busca-pdv/', { params: { q: searchTerm } });
+      setResultados(data);
+      setSelectedIndex(0);
+
+      // AUTO-ADD: Se retornar exatamente 1 item e o termo de busca for numérico (padrão de código de barras)
+      const isBarcode = /^\d+$/.test(searchTerm);
+      if (data.length === 1 && isBarcode) {
+        handleAdicionarItem(data[0], multiplier);
+      }
+    } catch { 
+      setResultados([]); 
+    }
+  }, [sessao, venda, isAdding, handleAdicionarItem]);
 
   const handleAddPagamento = () => {
     const valor = parseFloat(valorPago || '0');
@@ -416,6 +488,23 @@ export default function PDV() {
                 style={{ height: 48, paddingLeft: 48, fontSize: '1rem', borderRadius: 12 }}
                 value={busca}
                 onChange={e => handleBusca(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setSelectedIndex(prev => Math.min(prev + 1, resultados.length - 1));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setSelectedIndex(prev => Math.max(prev - 1, 0));
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (resultados.length > 0) {
+                      handleAdicionarItem(resultados[selectedIndex]);
+                    }
+                  } else if (e.key === 'Escape') {
+                    setBusca('');
+                    setResultados([]);
+                  }
+                }}
                 autoFocus
               />
            </div>
@@ -427,7 +516,15 @@ export default function PDV() {
                     <div 
                       key={p.id} 
                       className="card animate-in" 
-                      style={{ padding: '14px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: i === 0 ? '2px solid var(--accent)' : '1px solid var(--border)' }}
+                      style={{ 
+                        padding: '14px 20px', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        border: selectedIndex === i ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        background: selectedIndex === i ? 'var(--bg-hover)' : 'transparent'
+                      }}
                       onClick={() => handleAdicionarItem(p)}
                     >
                        <div>

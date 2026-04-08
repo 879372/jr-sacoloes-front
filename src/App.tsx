@@ -11,6 +11,7 @@ import Financeiro from './pages/Financeiro/Financeiro.tsx';
 import Compras from './pages/Compras/Compras.tsx';
 import Fiscal from './pages/Fiscal/Fiscal.tsx';
 import Relatorios from './pages/Relatorios/Relatorios.tsx';
+import Vendas from './pages/Vendas/Vendas.tsx';
 import './index.css';
 
 interface PrivateRouteProps {
@@ -38,6 +39,7 @@ function App() {
           <Route path="compras" element={<Compras />} />
           <Route path="fiscal" element={<Fiscal />} />
           <Route path="relatorios" element={<Relatorios />} />
+          <Route path="vendas" element={<Vendas />} />
         </Route>
 
         <Route path="/pdv" element={<PrivateRoute><PDV /></PrivateRoute>} />
