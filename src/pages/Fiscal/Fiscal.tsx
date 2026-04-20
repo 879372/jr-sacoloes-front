@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../../lib/api';
+import fiscalApi from '../../services/fiscalApi';
 import { 
   FileText, 
   Send, 
@@ -32,12 +33,11 @@ interface FiscalDoc {
 }
 
 const STATUS_MAP: Record<string, { label: string, color: string, icon: any }> = {
-  autorizado: { label: 'Autorizada', color: 'badge-green', icon: CheckCircle2 },
+  autorizada: { label: 'Autorizada', color: 'badge-green', icon: CheckCircle2 },
   processando: { label: 'Processando', color: 'badge-yellow', icon: AlertCircle },
-  processando_autorizacao: { label: 'Processando', color: 'badge-yellow', icon: AlertCircle },
-  cancelado: { label: 'Cancelada', color: 'badge-red', icon: Zap },
-  denegado: { label: 'Denegada', color: 'badge-red', icon: AlertCircle },
-  erro_autorizacao: { label: 'Erro', color: 'badge-red', icon: AlertCircle },
+  cancelada: { label: 'Cancelada', color: 'badge-red', icon: Zap },
+  denegada: { label: 'Denegada', color: 'badge-red', icon: AlertCircle },
+  rejeitada: { label: 'Rejeitada', color: 'badge-orange', icon: AlertCircle },
   pendente: { label: 'Pendente', color: 'badge-blue', icon: FileText },
 };
 
@@ -53,13 +53,12 @@ export default function Fiscal() {
   const { data: notas = [], isLoading, refetch: refetchNotas } = useQuery<any[]>({
     queryKey: ['fiscal-docs', activeTab],
     queryFn: async () => {
-      const resp = await api.get(`/fiscal/${activeTab}/`);
-      const data = resp.data.results || resp.data;
-      return data.map((d: any) => ({ ...d, tipo: activeTab === 'nfce' ? 'NFC-e' : 'NF-e' }));
+      const resp = await fiscalApi.get('/fiscal/notas/', { params: { tipo: activeTab } });
+      return resp.data;
     },
     refetchInterval: (query) => {
       const data = query.state.data as any[] | undefined;
-      return data?.some((n: any) => n.status === 'processando' || n.status === 'processando_autorizacao') ? 5000 : false;
+      return data?.some((n: any) => n.status === 'pendente') ? 5000 : false;
     }
   });
 
@@ -72,11 +71,11 @@ export default function Fiscal() {
     enabled: showEmitirModal
   });
 
-  const handleSync = async (n: any) => {
+  const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const resp = await api.post(`/fiscal/${activeTab}/${n.id}/sincronizar/`);
-      toast.success('Status atualizado!');
+      await fiscalApi.get(`/fiscal/status/`);
+      toast.success('Sincronização com SEFAZ concluída!');
       refetchNotas();
     } catch (err) {
       toast.error('Erro ao sincronizar.');
@@ -86,15 +85,12 @@ export default function Fiscal() {
   };
 
   const handlePreview = async (n: any) => {
-    if (activeTab === 'nfe') {
-      window.open(`${api.defaults.baseURL}/fiscal/nfe/${n.id}/preview-danfe/`, '_blank');
-    } else if (activeTab === 'nfce') {
-      if (n.caminho_danfe) window.open(n.caminho_danfe, '_blank');
-    }
+    const endpoint = n.tipo === 'nfce' ? `/fiscal/nfce/${n.id}/danfce/` : `/fiscal/nfe/${n.id}/danfe/`;
+    window.open(`${fiscalApi.defaults.baseURL}${endpoint}`, '_blank');
   };
 
   const exportarXML = () => {
-    const emitidas = notas.filter(n => n.status === 'autorizado' && (n.caminho_danfe || n.chave_nfe));
+    const emitidas = notas.filter(n => n.status === 'autorizada' && (n.caminho_danfe || n.chave_nfe));
     if (emitidas.length === 0) {
       toast.warning(`Nenhuma ${activeTab.toUpperCase()} emitida com XML disponível.`);
       return;
@@ -106,7 +102,7 @@ export default function Fiscal() {
     const email = prompt('Informe o e-mail do destinatário:');
     if (!email) return;
     try {
-      await api.post(`/fiscal/nfe/${n.id}/enviar-email/`, { emails: [email] });
+      await fiscalApi.post(`/fiscal/nfe/${n.id}/enviar-email/`, { emails: [email] });
       toast.success('E-mail enviado com sucesso!');
     } catch (err) {
       toast.error('Erro ao enviar e-mail.');
@@ -282,7 +278,7 @@ export default function Fiscal() {
                              </button>
                            )}
  
-                           {n.status === 'autorizado' && (
+                           {n.status === 'autorizada' && (
                              <button 
                                className="btn btn-sm btn-ghost" 
                                style={{ color: 'var(--accent-red)' }} 
@@ -296,7 +292,7 @@ export default function Fiscal() {
                                        toast.error('Justificativa inválida ou muito curta.');
                                        return;
                                      }
-                                     await api.post(`/fiscal/${activeTab}/${n.id}/cancelar/`, { justificativa });
+                                     await fiscalApi.post(`/fiscal/${n.tipo || activeTab}/${n.id}/cancelar/`, { justificativa });
                                      toast.success('Solicitação de cancelamento enviada!');
                                      refetchNotas();
                                    } catch (err: any) {
@@ -413,30 +409,49 @@ export default function Fiscal() {
                 disabled={!vendaSelecionada}
                 onClick={async () => {
                   try {
-                    toast.info(`Transmitindo ${tipoEmissao}...`);
+                    toast.info(`Transmitindo ${tipoEmissao} para ACBr...`);
                     
+                    const itensFiscal = vendaSelecionada.itens.map((item: any, idx: number) => ({
+                        codigo: item.produto_id?.toString() || idx.toString(),
+                        descricao: item.nome,
+                        ncm: '00000000',
+                        cfop: tipoEmissao === 'NFCe' ? '5102' : '5102',
+                        unidade: item.unidade || 'UN',
+                        quantidade: item.quantidade.toString(),
+                        valor_unitario: Number(item.preco_unitario).toFixed(2),
+                        valor_total: Number(item.subtotal).toFixed(2),
+                        cst_icms: '00',
+                    }));
+
+                    const payloadFiscal = {
+                        cnpj_emitente: '00000000000000',
+                        itens: itensFiscal,
+                        total: Number(vendaSelecionada.total).toFixed(2),
+                        pagamento: vendaSelecionada.pagamentos?.map((p: any) => ({
+                            forma: p.forma === 'DINHEIRO' ? '01' : '99',
+                            valor: Number(p.valor).toFixed(2)
+                        })) || [{ forma: '01', valor: Number(vendaSelecionada.total).toFixed(2) }],
+                        ambiente: 'homologacao'
+                    };
+
                     const endpoint = tipoEmissao === 'NFCe' 
-                      ? `/vendas/${vendaSelecionada.id}/emitir-nfce/`
+                      ? `/fiscal/nfce/emitir/`
                       : `/fiscal/nfe/emitir/`;
                     
-                    const payload = tipoEmissao === 'NFCe' 
-                      ? {} 
-                      : { venda_id: vendaSelecionada.id, natureza_operacao: 'Venda de mercadoria' };
-
-                    const resp = await api.post(endpoint, payload);
+                    const resp = await fiscalApi.post(endpoint, payloadFiscal);
                     
-                    if (resp.data.status === 'erro_autorizacao' || resp.data.status === 'error') {
-                      toast.error(`Erro: ${resp.data.mensagem || resp.data.mensagem_sefaz}`);
+                    if (resp.data.status === 'rejeitada' || resp.data.status === 'error') {
+                      toast.error(`Erro: ${resp.data.mensagem_sefaz || resp.data.mensagem}`);
                     } else {
-                      toast.success(tipoEmissao === 'NFCe' ? 'NFC-e autorizada!' : 'NF-e enviada para processamento!');
-                      if (resp.data.url_pdf) window.open(resp.data.url_pdf, '_blank');
+                      toast.success(tipoEmissao === 'NFCe' ? 'NFC-e autorizada!' : 'NF-e autorizada!');
+                      if (resp.data.url_consulta) window.open(resp.data.url_consulta, '_blank');
                       setShowEmitirModal(false);
                       setVendaSelecionada(null);
                       refetchNotas();
                       refetchVendas();
                     }
                   } catch (err: any) {
-                    toast.error(err.response?.data?.error || err.response?.data?.erro || 'Erro ao emitir nota.');
+                    toast.error(err.response?.data?.mensagem || 'Erro ao emitir nota.');
                   }
                 }}
                >

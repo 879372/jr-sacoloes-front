@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
+import fiscalApi from '../../services/fiscalApi';
 import { 
   ShoppingCart, 
   Search, 
@@ -215,18 +216,49 @@ export default function PDV() {
       
       if (emitirFiscal) {
           try {
-              toast.info('Enviando dados fiscais...');
-              const respFiscal = await api.post(`/vendas/${venda?.id}/emitir-nfce/`);
+              toast.info('Enviando dados fiscais para ACBr...');
+              
+              // 1. Mapear itens para o formato ACBr
+              const itensFiscal = carrinho.map((item, idx) => ({
+                  codigo: item.produto_id?.toString() || idx.toString(),
+                  descricao: item.nome,
+                  ncm: '00000000', // Padrão se não houver no cadastro
+                  cfop: '5102',     // Venda normal
+                  unidade: item.unidade || 'UN',
+                  quantidade: item.quantidade.toString(),
+                  valor_unitario: item.preco_unitario.toFixed(2),
+                  valor_total: item.subtotal.toFixed(2),
+                  cst_icms: '00',
+              }));
+
+              const payloadFiscal = {
+                  cnpj_emitente: '00000000000000', // Idealmente viria de um config
+                  itens: itensFiscal,
+                  total: total.toFixed(2),
+                  pagamento: pagamentosRealizados.map(p => ({
+                      forma: p.forma === 'DINHEIRO' ? '01' : 
+                             p.forma === 'CARTAO_CREDITO' ? '03' :
+                             p.forma === 'CARTAO_DEBITO' ? '04' :
+                             p.forma === 'PIX' ? '17' : '99',
+                      valor: p.valor.toFixed(2)
+                  })),
+                  ambiente: 'homologacao'
+              };
+
+              // 2. Emitir via nova API Fiscal (Monitor Local ou Cloud Simplificado)
+              const respFiscal = await fiscalApi.post('/fiscal/nfce/emitir/', payloadFiscal);
+              
               if (respFiscal.data.status === 'error') {
-                  toast.error(`Erro Fiscal: ${respFiscal.data.mensagem}`);
+                  toast.error(`Erro Fiscal: ${respFiscal.data.mensagem_sefaz || respFiscal.data.mensagem}`);
               } else {
                   toast.success('NFC-e Emitida com Sucesso!');
-                  if (respFiscal.data.url_pdf) {
-                      window.open(respFiscal.data.url_pdf, '_blank');
+                  if (respFiscal.data.url_consulta) {
+                      window.open(respFiscal.data.url_consulta, '_blank');
                   }
               }
-          } catch (err) {
-              toast.error('Erro ao comunicar com Sefaz.');
+          } catch (err: any) {
+              const msg = err.response?.data?.detail || err.response?.data?.mensagem || 'Erro ao comunicar com API Fiscal.';
+              toast.error(msg);
           }
       }
       return respVenda;

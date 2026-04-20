@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
+import fiscalApi from '../../services/fiscalApi';
 import { 
   Plus, 
   FileText, 
@@ -73,8 +74,8 @@ export default function Compras() {
     queryKey: ['compras-data', activeTab],
     queryFn: async () => {
       if (activeTab === 'MDE') {
-        const resp = await api.get('/fiscal/recebidas/');
-        return resp.data.results || resp.data;
+        const resp = await fiscalApi.get('/fiscal/cloud/distribuicao/nfe/', { params: { cpf_cnpj: '00000000000000', ambiente: 'homologacao' } });
+        return resp.data;
       }
       const resp = await api.get('/notas-compra/', { params: { status: activeTab } });
       return resp.data.results || resp.data;
@@ -106,8 +107,8 @@ export default function Compras() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const resp = await api.post('/fiscal/recebidas/sincronizar/');
-      toast.success(`Sincronização concluída: ${resp.data.total_novas} novas notas encontradas.`);
+      await fiscalApi.get('/fiscal/cloud/distribuicao/nfe/', { params: { cpf_cnpj: '00000000000000', ambiente: 'homologacao' } });
+      toast.success('Sincronização concluída!');
       refetchItems();
     } catch (err) {
       toast.error('Erro ao sincronizar com o portal Sefaz.');
@@ -120,8 +121,12 @@ export default function Compras() {
     if (!window.confirm('Deseja registrar "Ciência da Operação"? Isso permitirá baixar o XML completo.')) return;
     setIsSyncing(true);
     try {
-      await api.post(`/fiscal/recebidas/${n.id}/manifestar_ciencia/`);
-      toast.success('Ciência registrada! O XML ficará disponível em instantes.');
+      await fiscalApi.post(`/fiscal/cloud/distribuicao/manifestar/`, { 
+        chave: n.chave_nfe, 
+        evento: '210210', // Ciência da Operação
+        ambiente: 'homologacao'
+      });
+      toast.success('Ciência registrada!');
       refetchItems();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao manifestar.');
@@ -133,12 +138,28 @@ export default function Compras() {
   const handleImportar = async (n: NFeRecebida) => {
     setIsSyncing(true);
     try {
-      await api.post(`/fiscal/recebidas/${n.id}/importar/`);
-      toast.success('Nota importada com sucesso para os lançamentos!');
+      // 1. Buscar detalhes/XML da nota na API Fiscal
+      const { data: notaFiscal } = await fiscalApi.get(`/fiscal/cloud/distribuicao/notafiscal/${n.chave_nfe}/`);
+      
+      // 2. Mapear para o formato do nosso backend
+      const payloadCompra = {
+        numero_nf: notaFiscal.numero || '',
+        fornecedor: notaFiscal.emitente_nome || n.nome_emitente,
+        cnpj_fornecedor: notaFiscal.emitente_documento || n.documento_emitente,
+        data_emissao: notaFiscal.data_emissao || n.data_emissao,
+        valor_total: parseFloat(notaFiscal.valor_total || n.valor_total),
+        status: 'PENDENTE',
+        observacoes: `Importada via MD-e (Chave: ${n.chave_nfe})`
+      };
+
+      // 3. Salvar no backend local
+      await api.post('/notas-compra/', payloadCompra);
+      
+      toast.success('Nota importada com sucesso!');
       setActiveTab('PENDENTE');
       queryClient.invalidateQueries({ queryKey: ['compras-data'] });
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Erro ao importar. Verifique se o XML já está disponível.');
+      toast.error('Erro ao importar. Certifique-se que o XML já foi baixado pela API Fiscal.');
     } finally {
       setIsSyncing(false);
     }
