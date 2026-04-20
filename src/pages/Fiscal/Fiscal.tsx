@@ -54,7 +54,8 @@ export default function Fiscal() {
     queryKey: ['fiscal-docs', activeTab],
     queryFn: async () => {
       const resp = await fiscalApi.get('/notas/', { params: { tipo: activeTab } });
-      return resp.data;
+      // Garante que o retorno seja um array (a API pode retornar a lista direta ou envolta em { data: [] })
+      return Array.isArray(resp.data) ? resp.data : (resp.data?.data || []);
     },
     refetchInterval: (query) => {
       const data = query.state.data as any[] | undefined;

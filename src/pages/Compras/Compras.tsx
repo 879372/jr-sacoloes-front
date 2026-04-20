@@ -80,7 +80,8 @@ export default function Compras() {
             ambiente: 'homologacao' 
           } 
         });
-        return resp.data;
+        // A API ACBR Cloud retorna { "data": [...] }
+        return resp.data?.data || resp.data || [];
       }
       const resp = await api.get('/notas-compra/', { params: { status: activeTab } });
       return resp.data.results || resp.data;
