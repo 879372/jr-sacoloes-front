@@ -74,7 +74,12 @@ export default function Compras() {
     queryKey: ['compras-data', activeTab],
     queryFn: async () => {
       if (activeTab === 'MDE') {
-        const resp = await fiscalApi.get('/fiscal/cloud/distribuicao/nfe/', { params: { cpf_cnpj: '00000000000000', ambiente: 'homologacao' } });
+        const resp = await fiscalApi.get('/cloud/distribuicao/nfe/', { 
+          params: { 
+            cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000', 
+            ambiente: 'homologacao' 
+          } 
+        });
         return resp.data;
       }
       const resp = await api.get('/notas-compra/', { params: { status: activeTab } });
@@ -107,10 +112,15 @@ export default function Compras() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await fiscalApi.get('/fiscal/cloud/distribuicao/nfe/', { params: { cpf_cnpj: '00000000000000', ambiente: 'homologacao' } });
+      await fiscalApi.get('/cloud/distribuicao/nfe/', { 
+        params: { 
+          cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000', 
+          ambiente: 'homologacao' 
+        } 
+      });
       toast.success('Sincronização concluída!');
       refetchItems();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao sincronizar com o portal Sefaz.');
     } finally {
       setIsSyncing(false);
@@ -121,7 +131,7 @@ export default function Compras() {
     if (!window.confirm('Deseja registrar "Ciência da Operação"? Isso permitirá baixar o XML completo.')) return;
     setIsSyncing(true);
     try {
-      await fiscalApi.post(`/fiscal/cloud/distribuicao/manifestar/`, { 
+      await fiscalApi.post(`/cloud/distribuicao/manifestar/`, { 
         chave: n.chave_nfe, 
         evento: '210210', // Ciência da Operação
         ambiente: 'homologacao'
@@ -139,7 +149,7 @@ export default function Compras() {
     setIsSyncing(true);
     try {
       // 1. Buscar detalhes/XML da nota na API Fiscal
-      const { data: notaFiscal } = await fiscalApi.get(`/fiscal/cloud/distribuicao/notafiscal/${n.chave_nfe}/`);
+      const { data: notaFiscal } = await fiscalApi.get(`/cloud/distribuicao/notafiscal/${n.chave_nfe}/`);
       
       // 2. Mapear para o formato do nosso backend
       const payloadCompra = {
@@ -158,7 +168,7 @@ export default function Compras() {
       toast.success('Nota importada com sucesso!');
       setActiveTab('PENDENTE');
       queryClient.invalidateQueries({ queryKey: ['compras-data'] });
-    } catch (err: any) {
+    } catch {
       toast.error('Erro ao importar. Certifique-se que o XML já foi baixado pela API Fiscal.');
     } finally {
       setIsSyncing(false);

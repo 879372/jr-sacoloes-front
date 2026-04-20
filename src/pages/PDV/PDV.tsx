@@ -232,7 +232,7 @@ export default function PDV() {
               }));
 
               const payloadFiscal = {
-                  cnpj_emitente: '00000000000000', // Idealmente viria de um config
+                  cnpj_emitente: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000',
                   itens: itensFiscal,
                   total: total.toFixed(2),
                   pagamento: pagamentosRealizados.map(p => ({
@@ -246,7 +246,7 @@ export default function PDV() {
               };
 
               // 2. Emitir via nova API Fiscal (Monitor Local ou Cloud Simplificado)
-              const respFiscal = await fiscalApi.post('/fiscal/nfce/emitir/', payloadFiscal);
+              const respFiscal = await fiscalApi.post('/nfce/emitir/', payloadFiscal);
               
               if (respFiscal.data.status === 'error') {
                   toast.error(`Erro Fiscal: ${respFiscal.data.mensagem_sefaz || respFiscal.data.mensagem}`);
@@ -344,14 +344,14 @@ export default function PDV() {
           setResultados([]);
           setSelectedIndex(0);
           setQtyMultiplier(1);
-          buscaRef.current?.focus();
+          await refetchVenda();
+        }
+      } catch {
+          toast.error('Erro ao adicionar item.');
+      } finally {
+        setIsAdding(false);
       }
-    } catch (err) {
-      toast.error('Erro ao adicionar item.');
-    } finally {
-      setIsAdding(false);
-    }
-  }, [isAdding, venda, sessao, qtyMultiplier, total]);
+    }, [isAdding, venda, sessao, adicionarItemMutation, criarVendaMutation, qtyMultiplier]);
 
   const handleBusca = useCallback(async (q: string) => {
     setBusca(q);
@@ -391,7 +391,7 @@ export default function PDV() {
     } catch { 
       setResultados([]); 
     }
-  }, [sessao, venda, isAdding, handleAdicionarItem]);
+  }, [handleAdicionarItem]);
 
   const handleAddPagamento = () => {
     const valor = parseFloat(valorPago || '0');

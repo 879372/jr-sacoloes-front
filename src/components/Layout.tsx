@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { 
   LayoutDashboard, 
@@ -32,20 +32,17 @@ const navItems = [
 export default function Layout() {
   const { logout, user } = useAuthStore();
   const navigate = useNavigate();
-  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Fechar sidebar ao trocar de rota (mobile)
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+  // Fechar sidebar ao trocar de rota (mobile), removido useEffect para evitar cascading render
+  // Agora fechamos a sidebar diretamente no clique dos itens de navegação
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  let currentSection = '';
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <div className="layout">
@@ -57,7 +54,7 @@ export default function Layout() {
       {/* Mobile Overlay */}
       <div
         className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
+        onClick={closeSidebar}
       />
 
       {/* SIDEBAR */}
@@ -66,27 +63,34 @@ export default function Layout() {
           <div className="sidebar-logo-text">
             JR <span>Sacolões</span>
           </div>
-          <button className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu">
+          <button className="sidebar-close" onClick={closeSidebar} aria-label="Fechar menu">
             <X size={20} />
           </button>
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => {
-            const isNewSection = item.section && item.section !== currentSection;
-            if (item.section) currentSection = item.section;
+          {navItems.map((item, index) => {
+            // Verifica se este item inicia uma nova seção
+            // Busca a última seção definida em itens anteriores
+            let lastSection = '';
+            for (let i = 0; i < index; i++) {
+              if (navItems[i].section) lastSection = navItems[i].section;
+            }
+
+            const isNewSection = item.section && item.section !== lastSection;
 
             return (
               <div key={item.to}>
                 {isNewSection && <div className="nav-section">{item.section}</div>}
                 {item.external ? (
-                  <a className="nav-item" href={item.to} target="_blank" rel="noreferrer">
+                  <a className="nav-item" href={item.to} target="_blank" rel="noreferrer" onClick={closeSidebar}>
                     <item.Icon className="nav-icon" size={18} />
                     <span>{item.label}</span>
                   </a>
                 ) : (
                   <NavLink
                     to={item.to}
+                    onClick={closeSidebar}
                     className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                   >
                     <item.Icon className="nav-icon" size={18} />

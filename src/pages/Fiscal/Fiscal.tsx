@@ -53,7 +53,7 @@ export default function Fiscal() {
   const { data: notas = [], isLoading, refetch: refetchNotas } = useQuery<any[]>({
     queryKey: ['fiscal-docs', activeTab],
     queryFn: async () => {
-      const resp = await fiscalApi.get('/fiscal/notas/', { params: { tipo: activeTab } });
+      const resp = await fiscalApi.get('/notas/', { params: { tipo: activeTab } });
       return resp.data;
     },
     refetchInterval: (query) => {
@@ -74,18 +74,18 @@ export default function Fiscal() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await fiscalApi.get(`/fiscal/status/`);
+      await fiscalApi.get(`/status/`);
       toast.success('Sincronização com SEFAZ concluída!');
       refetchNotas();
-    } catch (err) {
-      toast.error('Erro ao sincronizar.');
+    } catch {
+      toast.error('Erro ao consultar status da SEFAZ.');
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handlePreview = async (n: any) => {
-    const endpoint = n.tipo === 'nfce' ? `/fiscal/nfce/${n.id}/danfce/` : `/fiscal/nfe/${n.id}/danfe/`;
+    const endpoint = n.tipo === 'nfce' ? `/nfce/${n.id}/danfce/` : `/nfe/${n.id}/danfe/`;
     window.open(`${fiscalApi.defaults.baseURL}${endpoint}`, '_blank');
   };
 
@@ -102,9 +102,9 @@ export default function Fiscal() {
     const email = prompt('Informe o e-mail do destinatário:');
     if (!email) return;
     try {
-      await fiscalApi.post(`/fiscal/nfe/${n.id}/enviar-email/`, { emails: [email] });
+      await fiscalApi.post(`/nfe/${n.id}/enviar-email/`, { emails: [email] });
       toast.success('E-mail enviado com sucesso!');
-    } catch (err) {
+    } catch {
       toast.error('Erro ao enviar e-mail.');
     }
   };
@@ -292,7 +292,7 @@ export default function Fiscal() {
                                        toast.error('Justificativa inválida ou muito curta.');
                                        return;
                                      }
-                                     await fiscalApi.post(`/fiscal/${n.tipo || activeTab}/${n.id}/cancelar/`, { justificativa });
+                                     await fiscalApi.post(`/${n.tipo || activeTab}/${n.id}/cancelar/`, { justificativa });
                                      toast.success('Solicitação de cancelamento enviada!');
                                      refetchNotas();
                                    } catch (err: any) {
@@ -435,8 +435,8 @@ export default function Fiscal() {
                     };
 
                     const endpoint = tipoEmissao === 'NFCe' 
-                      ? `/fiscal/nfce/emitir/`
-                      : `/fiscal/nfe/emitir/`;
+                      ? `/nfce/emitir/`
+                      : `/nfe/emitir/`;
                     
                     const resp = await fiscalApi.post(endpoint, payloadFiscal);
                     

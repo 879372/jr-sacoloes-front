@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 
-const FISCAL_API_BASE_URL = import.meta.env.VITE_FISCAL_API_URL || 'http://localhost:8080/api';
+const FISCAL_API_BASE_URL = import.meta.env.VITE_FISCAL_API_URL || 'https://web-production-540f8.up.railway.app/api/fiscal';
+const FISCAL_API_KEY = import.meta.env.VITE_FISCAL_API_KEY || '';
 
 const fiscalApi = axios.create({
   baseURL: FISCAL_API_BASE_URL,
@@ -10,12 +11,20 @@ const fiscalApi = axios.create({
   },
 });
 
-// Request interceptor for JWT
+// Interceptor para adicionar o token JWT ou a API Key
 fiscalApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('fiscal_access_token');
+  
+  // Prioridade 1: API Key (Multi-Tenancy B2B)
+  if (FISCAL_API_KEY) {
+    config.headers['X-Api-Key'] = FISCAL_API_KEY;
+  }
+  
+  // Prioridade 2: JWT (Identidade de Usuário)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
   return config;
 });
 
