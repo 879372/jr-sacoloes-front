@@ -11,12 +11,10 @@ import {
   X,
   Info,
   Search,
-  ExternalLink,
   Check,
-  Package,
   CheckCircle2,
-  Archive,
-  RefreshCw
+  RefreshCw,
+  Archive
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,60 +28,54 @@ interface NotaCompra {
   valor_total: string;
   status: 'PENDENTE' | 'RECEBIDA' | 'CANCELADA';
   observacoes: string;
+  chave_acesso?: string;
 }
 
-const STATUS_MAP: Record<string, { label: string, color: string }> = {
-  PENDENTE: { label: 'Pendente', color: 'badge-yellow' },
-  RECEBIDA: { label: 'Recebida', color: 'badge-green' },
-  CANCELADA: { label: 'Cancelada', color: 'badge-red' },
-  MDE: { label: 'MD-e', color: 'badge-purple' },
+const STATUS_MAP: Record<string, { label: string, color: string, icon: any }> = {
+  PENDENTE: { label: 'Aguardando', color: 'badge-yellow', icon: Info },
+  RECEBIDA: { label: 'Confirmada', color: 'badge-green', icon: CheckCircle2 },
+  CANCELADA: { label: 'Cancelada', color: 'badge-red', icon: X },
 };
 
 const formatCurrency = (val: any) => {
   return Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-interface NFeRecebida {
-  id: string;
-  chave_nfe: string;
-  nome_emitente: string;
-  documento_emitente: string;
-  valor_total: string;
-  data_emissao: string;
-  manifestacao_destinatario: string;
-  manifestacao_display?: string;
-  situacao: string;
-  nota_compra: any;
-}
-
 export default function Compras() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'PENDENTE' | 'RECEBIDA' | 'CANCELADA' | 'MDE'>('PENDENTE');
+  const [activeTab, setActiveTab] = useState<'PENDENTE' | 'CONFIRMADAS' | 'CANCELADAS'>('PENDENTE');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ 
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], // Início do mês
+    end: new Date().toISOString().split('T')[0] 
+  });
+  
   const [form, setForm] = useState({ 
     numero_nf: '', 
     fornecedor: '', 
     cnpj_fornecedor: '', 
     data_emissao: '', 
     valor_total: '', 
-    observacoes: '' 
+    observacoes: '',
+    chave_acesso: ''
   });
 
-  const { data: items = [], isLoading, refetch: refetchItems } = useQuery<any[]>({
-    queryKey: ['compras-data', activeTab],
+  // Query mapeada para o status correto
+  const currentStatus = activeTab === 'PENDENTE' ? 'PENDENTE' : (activeTab === 'CONFIRMADAS' ? 'RECEBIDA' : 'CANCELADA');
+
+  const { data: items = [], isLoading, refetch } = useQuery<NotaCompra[]>({
+    queryKey: ['compras-data', currentStatus, searchTerm, dateRange],
     queryFn: async () => {
-      if (activeTab === 'MDE') {
-        const resp = await fiscalApi.get('/cloud/distribuicao/nfe/', { 
-          params: { 
-            cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000', 
-            ambiente: 'homologacao' 
-          } 
-        });
-        // A API ACBR Cloud retorna { "data": [...] }
-        return resp.data?.data || resp.data || [];
-      }
-      const resp = await api.get('/notas-compra/', { params: { status: activeTab } });
+      const resp = await api.get('/notas-compra/', { 
+        params: { 
+          status: currentStatus,
+          search: searchTerm || undefined,
+          data_inicio: dateRange.start,
+          data_fim: dateRange.end
+        } 
+      });
       return resp.data.results || resp.data;
     },
   });
@@ -91,89 +83,78 @@ export default function Compras() {
   const mutation = useMutation({
     mutationFn: (newNota: any) => api.post('/notas-compra/', newNota),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notas-compra'] });
+      queryClient.invalidateQueries({ queryKey: ['compras-data'] });
       setShowModal(false);
-      setForm({ numero_nf: '', fornecedor: '', cnpj_fornecedor: '', data_emissao: '', valor_total: '', observacoes: '' });
-      toast.success('Nota fiscal registrada com sucesso!');
+      resetForm();
+      toast.success('Nota fiscal registrada!');
     },
   });
 
   const receberMutation = useMutation({
     mutationFn: (id: string) => api.post(`/notas-compra/${id}/receber/`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notas-compra'] });
-      queryClient.invalidateQueries({ queryKey: ['produtos'] }); // Para atualizar o estoque global se estiver em cache
-      toast.success('Nota recebida! Estoque atualizado.');
+      queryClient.invalidateQueries({ queryKey: ['compras-data'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Compra confirmada! Estoque atualizado.');
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.erro || 'Erro ao receber nota.');
+      toast.error(err.response?.data?.erro || 'Erro ao confirmar recebimento.');
     }
   });
 
+  // Lógica de Sincronização Unificada
   const handleSync = async () => {
     setIsSyncing(true);
+    const toastId = toast.loading('Sincronizando notas da Sefaz...');
     try {
-      await fiscalApi.get('/cloud/distribuicao/nfe/', { 
+      // 1. Busca notas na API Fiscal (MDe)
+      const resp = await fiscalApi.get('/cloud/distribuicao/nfe/', { 
         params: { 
           cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000', 
           ambiente: 'homologacao' 
         } 
       });
-      toast.success('Sincronização concluída!');
-      refetchItems();
+      const sefazNotes = resp.data?.data || resp.data || [];
+      
+      if (!sefazNotes.length) {
+        toast.info('Nenhuma nota nova encontrada na Sefaz.', { id: toastId });
+        return;
+      }
+
+      // 2. Tenta "Pré-cadastrar" notas novas que não temos no banco
+      let novos = 0;
+      for (const sn of sefazNotes) {
+        // Verifica se já temos essa chave na nossa LISTA (Pendente/Confirmada/Cancelada)
+        // Isso idealmente seria um endpoint 'check' no backend, mas vamos tentar o POST e tratar erro de unique se houver
+        try {
+          await api.post('/notas-compra/', {
+            numero_nf: '', // Será preenchido no download do XML futuramente
+            fornecedor: sn.nome_emitente,
+            cnpj_fornecedor: sn.documento_emitente,
+            data_emissao: sn.data_emissao,
+            valor_total: parseFloat(sn.valor_total || '0'),
+            chave_acesso: sn.chave_nfe,
+            status: 'PENDENTE',
+            observacoes: 'Sincronizado automaticamente via Sefaz'
+          });
+          novos++;
+        } catch (e: any) {
+          // Ignora se for erro de unicidade (já existe)
+          continue;
+        }
+      }
+
+      toast.success(`Sincronização concluída! ${novos} novas notas encontradas.`, { id: toastId });
+      refetch();
     } catch {
-      toast.error('Erro ao sincronizar com o portal Sefaz.');
+      toast.error('Erro ao conectar com a API Fiscal.', { id: toastId });
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleManifestar = async (n: NFeRecebida) => {
-    if (!window.confirm('Deseja registrar "Ciência da Operação"? Isso permitirá baixar o XML completo.')) return;
-    setIsSyncing(true);
-    try {
-      await fiscalApi.post(`/cloud/distribuicao/manifestar/`, { 
-        chave: n.chave_nfe, 
-        evento: '210210', // Ciência da Operação
-        ambiente: 'homologacao'
-      });
-      toast.success('Ciência registrada!');
-      refetchItems();
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Erro ao manifestar.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleImportar = async (n: NFeRecebida) => {
-    setIsSyncing(true);
-    try {
-      // 1. Buscar detalhes/XML da nota na API Fiscal
-      const { data: notaFiscal } = await fiscalApi.get(`/cloud/distribuicao/notafiscal/${n.chave_nfe}/`);
-      
-      // 2. Mapear para o formato do nosso backend
-      const payloadCompra = {
-        numero_nf: notaFiscal.numero || '',
-        fornecedor: notaFiscal.emitente_nome || n.nome_emitente,
-        cnpj_fornecedor: notaFiscal.emitente_documento || n.documento_emitente,
-        data_emissao: notaFiscal.data_emissao || n.data_emissao,
-        valor_total: parseFloat(notaFiscal.valor_total || n.valor_total),
-        status: 'PENDENTE',
-        observacoes: `Importada via MD-e (Chave: ${n.chave_nfe})`
-      };
-
-      // 3. Salvar no backend local
-      await api.post('/notas-compra/', payloadCompra);
-      
-      toast.success('Nota importada com sucesso!');
-      setActiveTab('PENDENTE');
-      queryClient.invalidateQueries({ queryKey: ['compras-data'] });
-    } catch {
-      toast.error('Erro ao importar. Certifique-se que o XML já foi baixado pela API Fiscal.');
-    } finally {
-      setIsSyncing(false);
-    }
+  const resetForm = () => {
+    setForm({ numero_nf: '', fornecedor: '', cnpj_fornecedor: '', data_emissao: '', valor_total: '', observacoes: '', chave_acesso: '' });
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -191,245 +172,212 @@ export default function Compras() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Gestão de Compras</h1>
-          <p className="page-subtitle">Registro de Notas e Entradas de Mercadoria</p>
+          <p className="page-subtitle">Central de Notas Fiscais e Entradas</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={18} />
-          Registrar Nota Fiscal
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="btn btn-ghost" onClick={handleSync} disabled={isSyncing}>
+            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+            Sincronizar Sefaz
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={18} />
+            Registrar Manual
+          </button>
+        </div>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <div className="tabs-container">
+      <div style={{ marginBottom: 24 }}>
+        <div className="tabs-container" style={{ background: 'var(--bg-card)', padding: '6px', borderRadius: '12px' }}>
           <button 
             className={`tab-item ${activeTab === 'PENDENTE' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('PENDENTE')}
+            onClick={() => { setActiveTab('PENDENTE'); setSearchTerm(''); }}
+            style={{ borderRadius: '8px' }}
           >
-            Lançamentos (Pendentes)
+            <Archive size={16} style={{ marginRight: 8 }} />
+            Pendentes
           </button>
           <button 
-            className={`tab-item ${activeTab === 'RECEBIDA' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('RECEBIDA')}
+            className={`tab-item ${activeTab === 'CONFIRMADAS' ? 'active' : ''}`} 
+            onClick={() => { setActiveTab('CONFIRMADAS'); setSearchTerm(''); }}
+            style={{ borderRadius: '8px' }}
           >
-            Compras Recebidas
+            <CheckCircle2 size={16} style={{ marginRight: 8 }} />
+            Confirmadas
           </button>
           <button 
-            className={`tab-item ${activeTab === 'CANCELADA' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('CANCELADA')}
+            className={`tab-item ${activeTab === 'CANCELADAS' ? 'active' : ''}`} 
+            onClick={() => { setActiveTab('CANCELADAS'); setSearchTerm(''); }}
+            style={{ borderRadius: '8px' }}
           >
+            <X size={16} style={{ marginRight: 8 }} />
             Canceladas
-          </button>
-          <button 
-            className={`tab-item ${activeTab === 'MDE' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('MDE')}
-          >
-            MD-e (Portal Sefaz)
           </button>
         </div>
       </div>
 
-      {activeTab === 'MDE' && (
-        <div className="card" style={{ borderLeft: '4px solid var(--accent-purple)', padding: '24px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Sincronização MDe</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Consulte notas fiscais emitidas por fornecedores contra seu CNPJ.</p>
+      {/* BARRA DE FILTROS UNIFICADA */}
+      <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 16, alignItems: 'end' }}>
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>BUSCAR FORNECEDOR / NF</label>
+            <div className="search-input-wrapper" style={{ margin: 0 }}>
+              <Search size={18} className="search-icon" />
+              <input 
+                className="input" 
+                placeholder="Ex: Nome, CNPJ ou Nº da NF" 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
             </div>
-            <button className="btn btn-primary" onClick={handleSync} disabled={isSyncing}>
-              <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-              Sincronizar com Sefaz
-            </button>
           </div>
-        </div>
-      )}
 
-      <div className="card" style={{ marginBottom: 24, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(59, 130, 246, 0.05)', borderColor: 'rgba(59, 130, 246, 0.2)' }}>
-        <Info size={18} className="text-accent" style={{ color: 'var(--accent)' }} />
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          {activeTab === 'PENDENTE' 
-            ? 'Notas lançadas manualmente aguardando o recebimento físico para entrada no estoque.' 
-            : activeTab === 'RECEBIDA' 
-              ? 'Histórico de compras confirmadas. O estoque destes produtos já foi atualizado.'
-              : activeTab === 'MDE'
-                ? 'Notas de terceiros localizadas na Sefaz. Dê "Ciência" para baixar e então "Importar" para lançar no sistema.'
-                : 'Notas fiscais canceladas ou estornadas.'}
-        </p>
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>DE (DATA ENTRADA)</label>
+            <input 
+              type="date" 
+              className="input" 
+              value={dateRange.start} 
+              onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} 
+            />
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ATÉ (DATA ENTRADA)</label>
+            <input 
+              type="date" 
+              className="input" 
+              value={dateRange.end} 
+              onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} 
+            />
+          </div>
+
+          <button className="btn btn-ghost" onClick={() => refetch()} style={{ height: 42 }}>
+             <RefreshCw size={16} />
+             Atualizar
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {isLoading ? (
-          <div className="loading" style={{ height: 300 }}>Carregando dados...</div>
+          <div className="loading" style={{ height: 300 }}>Carregando registros...</div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <div style={{ padding: 20, background: 'rgba(255,255,255,0.02)', borderRadius: '50%', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <FileText size={40} style={{ color: 'var(--text-muted)' }} />
-            </div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Vazio</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Nenhum registro encontrado nesta categoria.</p>
-          </div>
-        ) : activeTab === 'MDE' ? (
-          <div className="table-wrapper">
-             <table className="table">
-                <thead>
-                  <tr>
-                    <th>Emitente</th>
-                    <th>Chave de Acesso</th>
-                    <th>Valor Total</th>
-                    <th>Emissao</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((n: NFeRecebida) => (
-                    <tr key={n.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{n.nome_emitente}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{n.documento_emitente}</div>
-                      </td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{n.chave_nfe}</td>
-                      <td style={{ color: 'var(--accent-green)', fontWeight: 700 }}>R$ {formatCurrency(n.valor_total)}</td>
-                      <td>{new Date(n.data_emissao).toLocaleDateString('pt-BR')}</td>
-                      <td>
-                         <span className={`badge ${n.manifestacao_destinatario === 'nulo' ? 'badge-blue' : 'badge-green'}`}>
-                           {n.manifestacao_display || n.manifestacao_destinatario}
-                         </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          {n.manifestacao_destinatario === 'nulo' ? (
-                            <button className="btn btn-sm btn-ghost" onClick={() => handleManifestar(n)} title="Dar Ciência">
-                              <CheckCircle2 size={14} /> Ciência
-                            </button>
-                          ) : (
-                            <button 
-                              className="btn btn-sm btn-ghost" 
-                              style={{ color: 'var(--accent)' }} 
-                              onClick={() => handleImportar(n)} 
-                              title="Importar para Lançamentos"
-                              disabled={!!n.nota_compra}
-                            >
-                              <Archive size={14} />
-                              {n.nota_compra ? 'Importado' : 'Importar'}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-             </table>
+          <div style={{ textAlign: 'center', padding: 80 }}>
+            <FileText size={48} style={{ color: 'var(--text-muted)', marginBottom: 16, opacity: 0.5 }} />
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Nada por aqui</h3>
+            <p style={{ color: 'var(--text-muted)' }}>Use o botão sincronizar para buscar notas da Sefaz.</p>
           </div>
         ) : (
           <div className="table-wrapper">
             <table className="table">
               <thead>
                 <tr>
-                  <th>NF Nº</th>
-                  <th>Fornecedor</th>
+                  <th>Fornecedor / Emitente</th>
                   <th>Data Emissão</th>
-                  <th>Entrada</th>
+                  <th>Chave / Número</th>
                   <th>Valor Total</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((n: NotaCompra) => (
-                  <tr key={n.id}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{n.numero_nf || 'S/N'}</td>
-                    <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.fornecedor}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{n.cnpj_fornecedor || 'CNPJ não informado'}</div>
-                    </td>
-                    <td><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={12} /> {n.data_emissao || '—'}</div></td>
-                    <td>{new Date(n.data_entrada).toLocaleDateString('pt-BR')}</td>
-                    <td style={{ color: 'var(--accent-green)', fontWeight: 700 }}>
-                      R$ {formatCurrency(n.valor_total)}
-                    </td>
-                    <td>
-                      <span className={`badge ${STATUS_MAP[n.status]?.color || 'badge-blue'}`}>
-                        {STATUS_MAP[n.status]?.label || n.status}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        {n.status === 'PENDENTE' && (
-                          <button 
-                            className="btn btn-sm btn-primary" 
-                            style={{ background: 'var(--accent-green)', padding: '4px 10px', fontSize: '0.75rem' }} 
-                            onClick={() => receberMutation.mutate(n.id)}
-                            disabled={receberMutation.isPending}
-                          >
-                            <Check size={14} />
-                            Receber
+                {items.map((n) => {
+                  const StatusIcon = STATUS_MAP[n.status]?.icon || Info;
+                  return (
+                    <tr key={n.id}>
+                      <td>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{n.fornecedor}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{n.cnpj_fornecedor}</div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
+                          <Calendar size={14} className="text-muted" />
+                          {n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-primary)' }}>
+                          {n.numero_nf ? `NF: ${n.numero_nf}` : (n.chave_acesso ? `Chave: ...${n.chave_acesso.slice(-8)}` : 'S/N')}
+                        </div>
+                      </td>
+                      <td style={{ color: 'var(--accent-green)', fontWeight: 800 }}>
+                        R$ {formatCurrency(n.valor_total)}
+                      </td>
+                      <td>
+                        <span className={`badge ${STATUS_MAP[n.status]?.color || 'badge-blue'}`} style={{ gap: 4 }}>
+                          <StatusIcon size={12} />
+                          {STATUS_MAP[n.status]?.label || n.status}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {n.status === 'PENDENTE' && (
+                            <button 
+                              className="btn btn-sm btn-primary" 
+                              style={{ background: 'var(--accent-green)', padding: '6px 12px' }} 
+                              onClick={() => receberMutation.mutate(n.id)}
+                              disabled={receberMutation.isPending}
+                            >
+                              <Check size={14} />
+                              Confirmar
+                            </button>
+                          )}
+                          <button className="btn btn-sm btn-ghost" title="Ver detalhes">
+                             <FileText size={16} />
                           </button>
-                        )}
-                        <button className="btn btn-sm btn-ghost" title="Ver detalhes">
-                           <ExternalLink size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
+      {/* MODAL MANUAL */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="card animate-in" style={{ width: '100%', maxWidth: 550, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ padding: 8, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, color: 'var(--accent)' }}>
-                  <FileText size={20} />
-                </div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Novo Lançamento: NF Entrada</h2>
-              </div>
+          <div className="card animate-in" style={{ width: '100%', maxWidth: 550 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Lançamento Manual</h2>
               <button onClick={() => setShowModal(false)} className="btn btn-ghost" style={{ padding: 6, borderRadius: '50%' }}><X size={20} /></button>
             </div>
             
             <form onSubmit={handleSubmit}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Nome do Fornecedor *</label>
+                  <input className="input" required value={form.fornecedor} onChange={e => handleInputChange('fornecedor', e.target.value)} />
+                </div>
                 <div>
                   <label className="form-label">Número da NF</label>
-                  <input className="input" value={form.numero_nf} onChange={e => handleInputChange('numero_nf', e.target.value)} placeholder="000123" />
+                  <input className="input" value={form.numero_nf} onChange={e => handleInputChange('numero_nf', e.target.value)} />
                 </div>
                 <div>
                   <label className="form-label">Data de Emissão</label>
                   <input className="input" type="date" value={form.data_emissao} onChange={e => handleInputChange('data_emissao', e.target.value)} />
                 </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Fornecedor / Razão Social *</label>
-                  <div style={{ position: 'relative' }}>
-                    <Truck size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
-                    <input className="input" style={{ paddingLeft: 36 }} required value={form.fornecedor} onChange={e => handleInputChange('fornecedor', e.target.value)} placeholder="Nome do fornecedor" />
-                  </div>
-                </div>
-                <div>
-                  <label className="form-label">CNPJ Fornecedor</label>
-                  <input className="input" value={form.cnpj_fornecedor} onChange={e => handleInputChange('cnpj_fornecedor', e.target.value)} placeholder="00.000.000/0001-00" />
-                </div>
                 <div>
                   <label className="form-label">Valor Total (R$) *</label>
-                  <div style={{ position: 'relative' }}>
-                    <DollarSign size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
-                    <input className="input" style={{ paddingLeft: 36 }} type="number" step="0.01" required value={form.valor_total} onChange={e => handleInputChange('valor_total', e.target.value)} placeholder="0,00" />
-                  </div>
+                  <input className="input" type="number" step="0.01" required value={form.valor_total} onChange={e => handleInputChange('valor_total', e.target.value)} />
+                </div>
+                <div>
+                  <label className="form-label">Chave de Acesso</label>
+                  <input className="input" value={form.chave_acesso} onChange={e => handleInputChange('chave_acesso', e.target.value)} />
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Conteúdo XML ou Observações</label>
-                  <textarea className="input" rows={4} style={{ resize: 'vertical' }} value={form.observacoes} onChange={e => handleInputChange('observacoes', e.target.value)} placeholder="Cole o conteúdo do XML da nota fiscal aqui ou adicione observações sobre a entrada de mercadoria..." />
+                  <label className="form-label">Observações</label>
+                  <textarea className="input" rows={3} value={form.observacoes} onChange={e => handleInputChange('observacoes', e.target.value)} />
                 </div>
               </div>
               
-              <div style={{ display: 'flex', gap: 12, marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
-                <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }} disabled={mutation.isPending}>
-                  {mutation.isPending ? 'Salvando...' : 'Confirmar Entrada'}
+              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={mutation.isPending}>
+                  Salvar Lançamento
                 </button>
               </div>
             </form>

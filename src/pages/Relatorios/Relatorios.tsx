@@ -5,18 +5,16 @@ import {
 } from 'recharts';
 import api from '../../lib/api';
 import { 
-  BarChart3, 
-  Calendar, 
   TrendingUp, 
   TrendingDown, 
   DollarSign,
   ChevronRight,
-  Filter,
   Wallet,
   Clock,
   User as UserIcon,
   AlertTriangle,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,7 +44,6 @@ interface Sessao {
 }
 
 export default function Relatorios() {
-  const [periodo, setPeriodo] = useState('30');
   const [tab, setTab] = useState<'vendas' | 'caixa'>('vendas');
   const [vendaParaCancelar, setVendaParaCancelar] = useState<Venda | null>(null);
   const queryClient = useQueryClient();
@@ -65,11 +62,19 @@ export default function Relatorios() {
   });
   
   const { data: vendas = [], isLoading } = useQuery<Venda[]>({
-    queryKey: ['relatorios-vendas', periodo],
+    queryKey: ['relatorios-vendas'],
     queryFn: async () => {
       const resp = await api.get('/vendas/', { params: { status: 'FINALIZADA' } });
       return resp.data.results || resp.data;
     },
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ['relatorios-stats'],
+    queryFn: async () => {
+      const resp = await api.get('dashboard-stats/');
+      return resp.data;
+    }
   });
 
   const { data: sessoes = [], isLoading: loadingSessoes } = useQuery<Sessao[]>({
@@ -81,17 +86,6 @@ export default function Relatorios() {
     enabled: tab === 'caixa'
   });
 
-  // Processamento de dados para o gráfico
-  const dadosGrafico = (() => {
-    const daily: Record<string, number> = {};
-    vendas.forEach(v => {
-      const date = new Date(v.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      daily[date] = (daily[date] || 0) + parseFloat(v.total);
-    });
-    // Ordenar por data (aproximado por string DD/MM para o gráfico)
-    return Object.entries(daily).map(([name, total]) => ({ name, total })).sort((a,b) => a.name.localeCompare(b.name)).slice(-15);
-  })();
-
   const totalVendido = vendas.reduce((acc, v) => acc + parseFloat(v.total), 0);
   
   const formasMap: Record<string, number> = {};
@@ -101,37 +95,19 @@ export default function Relatorios() {
     });
   });
 
+  const dadosLucro = stats?.lucro_por_categoria || [];
+  const lucroTotal = dadosLucro.reduce((acc: number, item: any) => acc + item.total, 0);
+
   return (
-    <>
     <div className="animate-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Relatórios & BI</h1>
-          <p className="page-subtitle">Análise de desempenho e inteligência de vendas</p>
+          <p className="page-subtitle">Análise de lucratividade por categoria</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div className="tabs" style={{ display: 'flex', background: 'var(--bg-card)', padding: 4, borderRadius: 10, marginRight: 10, border: '1px solid var(--border)' }}>
+        <div className="tabs" style={{ display: 'flex', background: 'var(--bg-card)', padding: 4, borderRadius: 10, border: '1px solid var(--border)' }}>
              <button className={`btn btn-sm ${tab === 'vendas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('vendas')}>Vendas</button>
              <button className={`btn btn-sm ${tab === 'caixa' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('caixa')}>Sessões de Caixa</button>
-          </div>
-          <div className="search-input-wrapper" style={{ width: 180 }}>
-            <Calendar size={16} className="search-icon" />
-            <select 
-              className="input" 
-              value={periodo} 
-              onChange={(e) => setPeriodo(e.target.value)}
-              style={{ paddingLeft: 36, height: 42 }}
-            >
-              <option value="7">Últimos 7 dias</option>
-              <option value="15">Últimos 15 dias</option>
-              <option value="30">Últimos 30 dias</option>
-              <option value="90">Últimos 90 dias</option>
-            </select>
-          </div>
-          <button className="btn btn-ghost">
-            <Filter size={18} />
-            Filtros Avançados
-          </button>
         </div>
       </div>
 
@@ -141,26 +117,24 @@ export default function Relatorios() {
         ) : (
           <>
             <div className="kpi-card blue">
-              <div className="kpi-label">Faturamento Total</div>
-              <div className="kpi-value">R$ {totalVendido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-              <div className="kpi-sub" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <TrendingUp size={12} /> +12.5% em relação ao mês anterior
-              </div>
+              <div className="kpi-label">Faturamento Mensal</div>
+              <div className="kpi-value">R$ {stats?.faturamento_mes?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="kpi-sub">total bruto no período</div>
             </div>
             <div className="kpi-card green">
-              <div className="kpi-label">Ticket Médio</div>
-              <div className="kpi-value">R$ {(vendas.length ? totalVendido / vendas.length : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-              <div className="kpi-sub">média por venda finalizada</div>
+              <div className="kpi-label">Lucro Bruto Est.</div>
+              <div className="kpi-value">R$ {lucroTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="kpi-sub">baseado no preço de compra informado</div>
             </div>
             <div className="kpi-card purple">
-              <div className="kpi-label">Conversão</div>
-              <div className="kpi-value">100%</div>
-              <div className="kpi-sub">vendas finalizadas / totais</div>
+              <div className="kpi-label">Valor de Compras</div>
+              <div className="kpi-value">R$ {stats?.compras_mes?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="kpi-sub">total de NF-e recebidas no mês</div>
             </div>
             <div className="kpi-card yellow">
-              <div className="kpi-label">Volume de Itens</div>
-              <div className="kpi-value">{vendas.length * 3}</div>
-              <div className="kpi-sub">estimativa de produtos vendidos</div>
+              <div className="kpi-label">Volume de Vendas</div>
+              <div className="kpi-value">{vendas.length}</div>
+              <div className="kpi-sub">operações finalizadas</div>
             </div>
           </>
         )}
@@ -169,32 +143,31 @@ export default function Relatorios() {
       {tab === 'vendas' ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24, marginBottom: 28 }}>
+            {/* Gráfico Top 5 Lucro */}
             <div className="card" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-                <BarChart3 size={20} style={{ color: 'var(--accent)' }} />
-                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Volume de Vendas Diário</h3>
+                <TrendingUp size={20} style={{ color: 'var(--accent)' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Lucro por Categoria (Top 5)</h3>
               </div>
               <div style={{ height: 300, width: '100%' }}>
-                {isLoading ? (
-                  <div className="skeleton-line" style={{ height: '100%', borderRadius: 8 }}></div>
-                ) : dadosGrafico.length === 0 ? (
+                {dadosLucro.length === 0 ? (
                   <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: 12 }}>
                     <TrendingDown size={32} opacity={0.3} />
-                    <span>Sem dados para o período</span>
+                    <span>Sem dados de lucro (verifique os preços de compra)</span>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dadosGrafico}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                      <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} dy={10} />
-                      <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${v}`} />
+                    <BarChart data={dadosLucro.slice(0, 5)} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                      <XAxis type="number" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${v}`} />
+                      <YAxis type="category" dataKey="name" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} width={100} />
                       <Tooltip 
                         contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '8px' }}
                         cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
                       />
-                      <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                        {dadosGrafico.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={`rgba(59, 130, 246, ${0.4 + (index / dadosGrafico.length) * 0.6})`} />
+                      <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                        {dadosLucro.slice(0, 5).map((_: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={`rgba(16, 185, 129, ${1 - (index * 0.15)})`} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -203,85 +176,102 @@ export default function Relatorios() {
               </div>
             </div>
 
+            {/* Ranking Geral de Lucro */}
+            <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                <FileText size={20} style={{ color: 'var(--accent-green)' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Ranking Geral de Lucro</h3>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: 300 }}>
+                 {dadosLucro.map((item: any, idx: number) => (
+                   <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: idx < dadosLucro.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{ fontSize: '0.85rem' }}>
+                         <span style={{ fontWeight: 700, marginRight: 8, color: 'var(--text-muted)' }}>{idx + 1}º</span>
+                         <span style={{ fontWeight: 600 }}>{item.name}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                         <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--accent-green)' }}>R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{((item.total / (lucroTotal || 1)) * 100).toFixed(1)}% do lucro</div>
+                      </div>
+                   </div>
+                 ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, marginBottom: 28 }}>
             <div className="card" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
                 <DollarSign size={20} style={{ color: 'var(--accent-green)' }} />
                 <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Métodos de Pagamento</h3>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {isLoading ? (
-                  [1, 2, 3, 4].map(i => <div key={i} className="skeleton-line" style={{ height: 48, borderRadius: 8 }}></div>)
-                ) : Object.keys(formasMap).length === 0 ? (
+                {Object.keys(formasMap).length === 0 ? (
                   <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aguardando primeiras vendas...</div>
                 ) : (
                   Object.entries(formasMap).sort((a,b) => b[1] - a[1]).map(([forma, valor]) => (
-                    <div key={forma} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ padding: 8, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8, color: 'var(--accent-green)' }}>
-                          <Wallet size={16} />
+                    <div key={forma} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ padding: 6, background: 'rgba(16, 185, 129, 0.1)', borderRadius: 6, color: 'var(--accent-green)' }}>
+                          <Wallet size={14} />
                         </div>
-                        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{forma}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{forma}</span>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, fontSize: '1rem' }}>R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>{((valor / totalVendido) * 100).toFixed(1)}% do total</div>
+                        <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </div>
                   ))
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="card" style={{ padding: '0px', overflow: 'hidden' }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Últimas Vendas</h3>
-              <button className="btn btn-sm btn-ghost">Ver Tudo <ChevronRight size={14} /></button>
-            </div>
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Data/Hora</th>
-                    <th>Venda ID</th>
-                    <th>Formas Pagto.</th>
-                    <th style={{ textAlign: 'right' }}>Total</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    [1, 2, 3].map(i => (
-                      <tr key={i}><td colSpan={4}><div className="skeleton-line" style={{ height: 24, margin: '8px 0' }}></div></td></tr>
-                    ))
-                  ) : vendas.slice(0, 10).map((v, vIdx) => (
-                    <tr key={`venda-${v.id}-${vIdx}`}>
-                      <td>{v.created_at ? new Date(v.created_at).toLocaleString('pt-BR') : '—'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>#{v.id}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {v.pagamentos?.map((p, idx) => (
-                            <span key={`${v.id}-p-${idx}`} className="badge badge-blue" style={{ fontSize: '0.65rem' }}>{p.forma}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent-green)' }}>
-                        R$ {parseFloat(v.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td>
-                        <button 
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--accent-red)', padding: '2px 8px', fontSize: '0.75rem' }}
-                          onClick={() => setVendaParaCancelar(v)}
-                          disabled={cancelarVendaMutation.isPending}
-                        >
-                          Cancelar
-                        </button>
-                      </td>
+            <div className="card" style={{ padding: '0px', overflow: 'hidden' }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Últimas Vendas</h3>
+                <button className="btn btn-sm btn-ghost">Ver Tudo <ChevronRight size={14} /></button>
+              </div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Data/Hora</th>
+                      <th>Venda ID</th>
+                      <th>Formas Pagto.</th>
+                      <th style={{ textAlign: 'right' }}>Total</th>
+                      <th>Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {vendas.slice(0, 10).map((v, vIdx) => (
+                      <tr key={`venda-${v.id}-${vIdx}`}>
+                        <td>{v.created_at ? new Date(v.created_at).toLocaleString('pt-BR') : '—'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>#{v.id}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {v.pagamentos?.map((p, idx) => (
+                              <span key={`${v.id}-p-${idx}`} className="badge badge-blue" style={{ fontSize: '0.65rem' }}>{p.forma}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent-green)' }}>
+                          R$ {parseFloat(v.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: 'var(--accent-red)', padding: '2px 8px', fontSize: '0.75rem' }}
+                            onClick={() => setVendaParaCancelar(v)}
+                            disabled={cancelarVendaMutation.isPending}
+                          >
+                            Cancelar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </>
@@ -334,44 +324,43 @@ export default function Relatorios() {
           </div>
         </div>
       )}
-    </div>
 
-    {/* Modal de Confirmação de Cancelamento */}
-    {vendaParaCancelar && (
-      <div style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-      }}>
-        <div className="card" style={{ padding: 32, maxWidth: 420, width: '90%', textAlign: 'center' }}>
-          <AlertTriangle size={40} style={{ color: 'var(--accent-red)', margin: '0 auto 16px' }} />
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 8 }}>Cancelar Venda?</h3>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 24, fontSize: '0.9rem' }}>
-            Venda <strong>#{vendaParaCancelar.id}</strong> — R$ {parseFloat(vendaParaCancelar.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}<br/>
-            Esta ação não pode ser desfeita.
-          </p>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button
-              id="btn-confirmar-cancelamento"
-              className="btn btn-primary"
-              style={{ flex: 1, background: 'var(--accent-red)', borderColor: 'var(--accent-red)' }}
-              onClick={() => cancelarVendaMutation.mutate(vendaParaCancelar!.id)}
-              disabled={cancelarVendaMutation.isPending}
-            >
-              {cancelarVendaMutation.isPending ? 'Cancelando...' : 'Confirmar Cancelamento'}
-            </button>
-            <button
-              id="btn-fechar-modal-cancelamento"
-              className="btn btn-ghost"
-              style={{ flex: 1 }}
-              onClick={() => setVendaParaCancelar(null)}
-              disabled={cancelarVendaMutation.isPending}
-            >
-              <X size={14} /> Voltar
-            </button>
+      {/* Modal de Confirmação de Cancelamento */}
+      {vendaParaCancelar && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div className="card" style={{ padding: 32, maxWidth: 420, width: '90%', textAlign: 'center' }}>
+            <AlertTriangle size={40} style={{ color: 'var(--accent-red)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 8 }}>Cancelar Venda?</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 24, fontSize: '0.9rem' }}>
+              Venda <strong>#{vendaParaCancelar.id}</strong> — R$ {parseFloat(vendaParaCancelar.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}<br/>
+              Esta ação não pode ser desfeita.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                id="btn-confirmar-cancelamento"
+                className="btn btn-primary"
+                style={{ flex: 1, background: 'var(--accent-red)', borderColor: 'var(--accent-red)' }}
+                onClick={() => cancelarVendaMutation.mutate(vendaParaCancelar!.id)}
+                disabled={cancelarVendaMutation.isPending}
+              >
+                {cancelarVendaMutation.isPending ? 'Cancelando...' : 'Confirmar Cancelamento'}
+              </button>
+              <button
+                id="btn-fechar-modal-cancelamento"
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setVendaParaCancelar(null)}
+                disabled={cancelarVendaMutation.isPending}
+              >
+                <X size={14} /> Voltar
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-    </>
+      )}
+    </div>
   );
 }

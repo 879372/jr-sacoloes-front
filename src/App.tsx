@@ -5,6 +5,7 @@ import Login from './pages/Login/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Produtos from './pages/Produtos/Produtos.tsx';
+import Grupos from './pages/Produtos/Grupos.tsx';
 import Clientes from './pages/Clientes/Clientes.tsx';
 import PDV from './pages/PDV/PDV.tsx';
 import Financeiro from './pages/Financeiro/Financeiro.tsx';
@@ -34,6 +35,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="produtos" element={<Produtos />} />
+          <Route path="produtos/grupos" element={<Grupos />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="financeiro" element={<Financeiro />} />
           <Route path="compras" element={<Compras />} />

@@ -38,6 +38,10 @@ export default function KardexModal({ produtoId, produtoNome, onClose }: KardexM
     });
   };
 
+  const formatQty = (qty: string | number) => {
+    return Number(qty).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" style={{ maxWidth: '800px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
@@ -93,10 +97,10 @@ export default function KardexModal({ produtoId, produtoNome, onClose }: KardexM
                         {m.observacoes && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.observacoes}</div>}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 600, color: m.tipo === 'ENTRADA' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                      {m.tipo === 'ENTRADA' ? '+' : '-'}{Number(m.quantidade).toFixed(3)}
+                      {m.tipo === 'ENTRADA' ? '+' : '-'}{formatQty(m.quantidade)}
                     </td>
-                    <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{Number(m.saldo_anterior).toFixed(3)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{Number(m.saldo_atual).toFixed(3)}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{formatQty(m.saldo_anterior)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{formatQty(m.saldo_atual)}</td>
                   </tr>
                 ))}
               </tbody>

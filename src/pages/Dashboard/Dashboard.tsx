@@ -108,14 +108,14 @@ export default function Dashboard() {
             <div className="kpi-card yellow">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                 <div>
-                  <div className="kpi-label">Itens Críticos</div>
-                  <div className="kpi-value">{stats?.itens_criticos}</div>
+                  <div className="kpi-label">Compras Mês Atual</div>
+                  <div className="kpi-value">{formatCurrency(stats?.compras_mes)}</div>
                 </div>
                 <div style={{ padding: 8, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 8, color: 'var(--accent-yellow)' }}>
-                  <AlertTriangle size={20} />
+                  <ShoppingCart size={20} />
                 </div>
               </div>
-              <div className="kpi-sub">abaixo do estoque mínimo</div>
+              <div className="kpi-sub">Total de NF-e recebidas</div>
             </div>
 
             <div className="kpi-card red" style={{ background: 'var(--card-bg)' }}>

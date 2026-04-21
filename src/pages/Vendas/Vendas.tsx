@@ -55,15 +55,21 @@ export default function Vendas() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateRange, setDateRange] = useState({ 
+    start: new Date().toISOString().split('T')[0], 
+    end: new Date().toISOString().split('T')[0] 
+  });
   const [selectedVenda, setSelectedVenda] = useState<Venda | null>(null);
 
   const { data: vendas, isLoading } = useQuery<Venda[]>({
-    queryKey: ['vendas', searchTerm, statusFilter],
+    queryKey: ['vendas', searchTerm, statusFilter, dateRange],
     queryFn: async () => {
       const resp = await api.get('/vendas/', { 
         params: { 
           q: searchTerm, 
-          status: statusFilter || undefined 
+          status: statusFilter || undefined,
+          data_inicio: dateRange.start,
+          data_fim: dateRange.end
         } 
       });
       return resp.data.results || resp.data;
@@ -117,29 +123,56 @@ export default function Vendas() {
 
       {/* FILTROS */}
       <div className="card" style={{ marginBottom: 24, padding: '16px 24px' }}>
-        <div className="search-bar" style={{ margin: 0 }}>
-          <div className="search-input-wrapper">
-            <Search className="search-icon" size={18} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) 1fr 1fr 1fr auto', gap: 12, alignItems: 'end' }}>
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CLIENTE / ID</label>
+            <div className="search-input-wrapper" style={{ margin: 0 }}>
+              <Search className="search-icon" size={18} />
+              <input 
+                type="text" 
+                className="input" 
+                placeholder="Buscar..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>DATA INICIAL</label>
             <input 
-              type="text" 
+              type="date" 
               className="input" 
-              placeholder="Buscar por ID ou cliente..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              value={dateRange.start} 
+              onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} 
             />
           </div>
-          <select 
-            className="select" 
-            style={{ width: 180 }}
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            <option value="">Todos Status</option>
-            <option value="FINALIZADA">Finalizadas</option>
-            <option value="CANCELADA">Canceladas</option>
-            <option value="EM_ABERTO">Em Aberto</option>
-          </select>
-          <button className="btn btn-ghost" onClick={() => queryClient.invalidateQueries({ queryKey: ['vendas'] })}>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>DATA FINAL</label>
+            <input 
+              type="date" 
+              className="input" 
+              value={dateRange.end} 
+              onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} 
+            />
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>STATUS</label>
+            <select 
+              className="select" 
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="FINALIZADA">Finalizadas</option>
+              <option value="CANCELADA">Canceladas</option>
+              <option value="EM_ABERTO">Em Aberto</option>
+            </select>
+          </div>
+
+          <button className="btn btn-ghost" onClick={() => queryClient.invalidateQueries({ queryKey: ['vendas'] })} style={{ height: 42 }}>
             <Clock size={18} />
             Atualizar
           </button>

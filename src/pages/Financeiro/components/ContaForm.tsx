@@ -14,10 +14,12 @@ export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
     vencimento: '', 
     status: 'PENDENTE', 
     observacoes: '', 
-    fornecedor_ou_cliente: '' 
+    fornecedor_ou_cliente: '',
+    recorrente: false,
+    data_fim_recorrencia: ''
   });
 
-  const handleChange = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const handleChange = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,6 +29,8 @@ export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
       vencimento: form.vencimento,
       status: form.status,
       observacoes: form.observacoes,
+      recorrente: form.recorrente,
+      data_fim_recorrencia: form.data_fim_recorrencia || null,
       ...(tipo === 'PAGAR' ? { fornecedor: form.fornecedor_ou_cliente } : { cliente_nome: form.fornecedor_ou_cliente }),
     };
     
@@ -97,6 +101,31 @@ export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
           </select>
         </div>
       </div>
+      
+      <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px' }}>
+        <input 
+          type="checkbox" 
+          id="recorrente"
+          style={{ width: 18, height: 18 }}
+          checked={form.recorrente} 
+          onChange={e => handleChange('recorrente', e.target.checked)} 
+        />
+        <label htmlFor="recorrente" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>Lançamento Fixo (Repetir mensalmente)</label>
+      </div>
+
+      {form.recorrente && (
+        <div className="form-group animate-in">
+          <label className="form-label">Repetir até o mês de:</label>
+          <input 
+            className="input" 
+            type="date" 
+            required={form.recorrente}
+            value={form.data_fim_recorrencia} 
+            onChange={e => handleChange('data_fim_recorrencia', e.target.value)} 
+          />
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: 4 }}>O sistema irá gerar um lançamento para cada mês até esta data.</p>
+        </div>
+      )}
       
       <div className="form-group">
         <label className="form-label">Observações</label>

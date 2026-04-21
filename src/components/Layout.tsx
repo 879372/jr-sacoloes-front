@@ -22,6 +22,7 @@ const navItems = [
   { label: 'Histórico Vendas', Icon: History, to: '/vendas', section: null },
   { label: 'PDV / Caixa', Icon: ShoppingCart, to: '/pdv', section: null, external: true },
   { label: 'Produtos', Icon: Package, to: '/produtos', section: 'CADASTROS' },
+  { label: 'Grupos / Categorias', Icon: Package, to: '/produtos/grupos', section: null },
   { label: 'Clientes', Icon: Users, to: '/clientes', section: null },
   { label: 'Compras / NF', Icon: FileInput, to: '/compras', section: 'OPERACIONAL' },
   { label: 'Financeiro', Icon: Wallet, to: '/financeiro', section: null },
@@ -91,6 +92,7 @@ export default function Layout() {
                   <NavLink
                     to={item.to}
                     onClick={closeSidebar}
+                    end={item.to === '/produtos'} // Evita que Produtos fique ativo quando estiver em sub-rotas como /produtos/grupos
                     className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                   >
                     <item.Icon className="nav-icon" size={18} />

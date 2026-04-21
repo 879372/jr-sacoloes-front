@@ -421,6 +421,10 @@ body {
   background: var(--bg-secondary);
 }
 
+.pdv-mobile-nav {
+  display: none;
+}
+
 @media (max-width: 1024px) {
   .pdv-cart-column { width: 320px; padding: 16px; }
   .pdv-search-column { padding: 16px; }
@@ -498,10 +502,40 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 32px;
-  width: 90%;
+  padding: 24px;
+  width: 95%;
   max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.pdv-payment-grid {
+  display: flex;
+  gap: 24px;
+}
+
+.pdv-payment-summary {
+  background: rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+}
+
+@media (max-width: 768px) {
+  .pdv-payment-grid {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .pdv-payment-summary {
+    min-width: 0;
+  }
+  .hide-mobile {
+    display: none;
+  }
 }
 
 .modal-header {

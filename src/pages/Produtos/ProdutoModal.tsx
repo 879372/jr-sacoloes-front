@@ -1,14 +1,20 @@
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
-import { X, Package, Ruler, DollarSign, Tag, Info } from 'lucide-react';
+import { X, Package, Ruler, DollarSign, Tag, Info, Plus } from 'lucide-react';
+
+interface Grupo {
+  id: string | number;
+  nome: string;
+}
 
 interface Produto {
   id?: string | number;
   nome: string;
   codigo_legado: string;
   codigo_barras: string;
-  preco_compra: number;
-  preco_venda: number;
+  preco_compra: number | string;
+  preco_venda: number | string;
   unidade_medida: string;
   grupo: string;
   subgrupo: string;
@@ -26,12 +32,13 @@ interface ProdutoModalProps {
 }
 
 export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoModalProps) {
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState<Produto>({
     nome: '',
     codigo_legado: '',
     codigo_barras: '',
-    preco_compra: 0,
-    preco_venda: 0,
+    preco_compra: '',
+    preco_venda: '',
     unidade_medida: 'UN',
     grupo: '',
     subgrupo: '',
@@ -43,6 +50,28 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
   });
   
   const [loading, setLoading] = useState(false);
+  const [showAddGrupo, setShowAddGrupo] = useState(false);
+  const [novoGrupo, setNovoGrupo] = useState('');
+
+  // Fetch Categorias/Grupos
+  const { data: grupos = [] } = useQuery<Grupo[]>({
+    queryKey: ['grupos'],
+    queryFn: async () => {
+      const resp = await api.get('/grupos/');
+      return Array.isArray(resp.data) ? resp.data : (resp.data.results || []);
+    }
+  });
+
+  // Mutation para novo grupo
+  const addGrupoMutation = useMutation({
+    mutationFn: (nome: string) => api.post('/grupos/', { nome }),
+    onSuccess: (resp) => {
+      queryClient.invalidateQueries({ queryKey: ['grupos'] });
+      setFormData(prev => ({ ...prev, grupo: resp.data.nome }));
+      setShowAddGrupo(false);
+      setNovoGrupo('');
+    }
+  });
 
   useEffect(() => {
     if (produto) {
@@ -50,19 +79,24 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
         ...produto,
         codigo_legado: produto.codigo_legado || '',
         codigo_barras: produto.codigo_barras || '',
-        preco_compra: Number(produto.preco_compra) || 0,
-        preco_venda: Number(produto.preco_venda) || 0,
+        preco_compra: produto.preco_compra ?? '',
+        preco_venda: produto.preco_venda ?? '',
       });
     }
   }, [produto]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
     
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ ...prev, [name]: checked }));
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : (type === 'number' ? Number(value) : value)
+      [name]: value
     }));
   };
 
@@ -70,10 +104,21 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
     e.preventDefault();
     setLoading(true);
     try {
+      const dataToSubmit = {
+        ...formData,
+        preco_compra: formData.preco_compra === '' ? 0 : Number(formData.preco_compra),
+        preco_venda: formData.preco_venda === '' ? 0 : Number(formData.preco_venda),
+      };
+
+      // Se for novo ou o código legado estiver vazio, removemos para o backend gerar
+      if (!formData.codigo_legado || formData.codigo_legado === '') {
+        delete (dataToSubmit as any).codigo_legado;
+      }
+
       if (produto?.id) {
-        await api.patch(`/produtos/${produto.id}/`, formData);
+        await api.patch(`/produtos/${produto.id}/`, dataToSubmit);
       } else {
-        await api.post('/produtos/', formData);
+        await api.post('/produtos/', dataToSubmit);
       }
       onSuccess();
       onClose();
@@ -130,12 +175,8 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
               </select>
             </div>
 
-            <div style={{ gridColumn: 'span 4' }}>
-              <label className="form-label">Código Legado</label>
-              <input name="codigo_legado" value={formData.codigo_legado} onChange={handleChange} className="input" placeholder="Ex: 502" />
-            </div>
 
-            <div style={{ gridColumn: 'span 8' }}>
+            <div style={{ gridColumn: 'span 12' }}>
               <label className="form-label">Código de Barras (EAN)</label>
               <input name="codigo_barras" value={formData.codigo_barras} onChange={handleChange} className="input" placeholder="7890000000000" />
             </div>
@@ -157,8 +198,50 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
             </div>
 
             <div style={{ gridColumn: 'span 6' }}>
-              <label className="form-label">Grupo / Categoria</label>
-              <input name="grupo" value={formData.grupo} onChange={handleChange} className="input" placeholder="Ex: Hortifruti" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Grupo / Categoria</label>
+                <button 
+                  type="button" 
+                  className="btn btn-xs btn-ghost" 
+                  onClick={() => setShowAddGrupo(!showAddGrupo)}
+                  style={{ fontSize: '0.65rem', padding: '2px 4px' }}
+                >
+                  <Plus size={10} style={{ marginRight: 2 }} />
+                  {showAddGrupo ? 'Cancelar' : 'Novo Grupo'}
+                </button>
+              </div>
+              
+              {showAddGrupo ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input 
+                    className="input" 
+                    value={novoGrupo} 
+                    onChange={e => setNovoGrupo(e.target.value)}
+                    placeholder="Nome do novo grupo..."
+                    autoFocus
+                  />
+                  <button 
+                    type="button" 
+                    className="btn btn-primary btn-sm"
+                    onClick={() => novoGrupo && addGrupoMutation.mutate(novoGrupo)}
+                    disabled={addGrupoMutation.isPending}
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <select 
+                  name="grupo" 
+                  value={formData.grupo} 
+                  onChange={handleChange} 
+                  className="input"
+                >
+                  <option value="">Selecione um grupo...</option>
+                  {grupos.map(g => (
+                    <option key={g.id} value={g.nome}>{g.nome}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div style={{ gridColumn: 'span 6' }}>
