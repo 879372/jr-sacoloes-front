@@ -107,47 +107,58 @@ export default function Compras() {
     setIsSyncing(true);
     const toastId = toast.loading('Sincronizando notas da Sefaz...');
     try {
-      // 1. Busca notas na API Fiscal (MDe)
+      // 1. Busca distribuições na API Fiscal (MDe)
       const resp = await fiscalApi.get('/cloud/distribuicao/nfe/', { 
         params: { 
-          cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000', 
+          cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ?.replace(/\D/g, '') || '00000000000000', 
           ambiente: 'homologacao' 
         } 
       });
-      const sefazNotes = resp.data?.data || resp.data || [];
       
-      if (!sefazNotes.length) {
+      // A resposta do ACBr Cloud vem como { "@count": X, "data": [ { documents: [...] } ] }
+      const distributions = resp.data?.data || [];
+      
+      // Achata todos os documentos de todas as distribuições em um único array
+      const allDocs = distributions.flatMap((dist: any) => dist.documentos || []);
+      
+      if (!allDocs.length) {
         toast.info('Nenhuma nota nova encontrada na Sefaz.', { id: toastId });
         return;
       }
 
-      // 2. Tenta "Pré-cadastrar" notas novas que não temos no banco
+      // 2. Tenta "Pré-cadastrar" notas novas (ResNFe ou procNFe)
       let novos = 0;
-      for (const sn of sefazNotes) {
-        // Verifica se já temos essa chave na nossa LISTA (Pendente/Confirmada/Cancelada)
-        // Isso idealmente seria um endpoint 'check' no backend, mas vamos tentar o POST e tratar erro de unique se houver
+      for (const doc of allDocs) {
+        // Ignora documentos que não sejam resumos de NF-e ou a própria NF-e
+        if (doc.tipo_documento !== 'ResNFe' && doc.tipo_documento !== 'procNFe') continue;
+
         try {
           await api.post('/notas-compra/', {
-            numero_nf: '', // Será preenchido no download do XML futuramente
-            fornecedor: sn.nome_emitente,
-            cnpj_fornecedor: sn.documento_emitente,
-            data_emissao: sn.data_emissao,
-            valor_total: parseFloat(sn.valor_total || '0'),
-            chave_acesso: sn.chave_nfe,
+            numero_nf: doc.numero || '', 
+            fornecedor: doc.nome_emitente || doc.xNome || 'Fornecedor Desconhecido',
+            cnpj_fornecedor: doc.documento_emitente || doc.CNPJ || '',
+            data_emissao: doc.data_emissao || doc.dhEmi || new Date().toISOString(),
+            valor_total: parseFloat(doc.valor_total || doc.vNF || '0'),
+            chave_acesso: doc.chave_acesso || doc.chNFe,
             status: 'PENDENTE',
-            observacoes: 'Sincronizado automaticamente via Sefaz'
+            observacoes: 'Sincronizado automaticamente via Sefaz (MDe)'
           });
           novos++;
         } catch (e: any) {
-          // Ignora se for erro de unicidade (já existe)
+          // Ignora se for erro de unicidade (já existe) ou outros erros de post
           continue;
         }
       }
 
-      toast.success(`Sincronização concluída! ${novos} novas notas encontradas.`, { id: toastId });
+      if (novos > 0) {
+        toast.success(`Sincronização concluída! ${novos} novas notas importadas.`, { id: toastId });
+      } else {
+        toast.info('Sincronização concluída. Nenhuma nota nova para importar.', { id: toastId });
+      }
       refetch();
-    } catch {
-      toast.error('Erro ao conectar com a API Fiscal.', { id: toastId });
+    } catch (err: any) {
+      console.error('Erro na sincronização:', err);
+      toast.error('Erro ao conectar com a API Fiscal ou processar dados.', { id: toastId });
     } finally {
       setIsSyncing(false);
     }
