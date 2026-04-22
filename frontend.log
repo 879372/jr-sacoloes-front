@@ -1,0 +1,10 @@
+
+> vite-react-starter@0.0.0 dev
+> vite --port 5173 --host
+
+
+  VITE v8.0.3  ready in 182 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.0.12:5173/
+  ➜  Network: http://169.254.132.218:5173/
