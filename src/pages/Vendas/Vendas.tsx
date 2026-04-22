@@ -77,7 +77,8 @@ export default function Vendas() {
   });
 
   const cancelarMutation = useMutation({
-    mutationFn: (id: number) => api.post(`/vendas/${id}/cancelar/`),
+    mutationFn: ({ id, justificativa }: { id: number, justificativa?: string }) => 
+      api.post(`/vendas/${id}/cancelar/`, { justificativa }),
     onSuccess: () => {
       toast.success('Venda cancelada com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['vendas'] });
@@ -305,15 +306,28 @@ export default function Vendas() {
                )}
                {selectedVenda.status === 'FINALIZADA' && (
                  <>
-                   <button 
-                     className="btn btn-danger" 
-                     onClick={() => {
-                        if (confirm('Tem certeza que deseja cancelar esta venda? O estoque será devolvido.')) {
-                          cancelarMutation.mutate(selectedVenda.id);
+                    <button 
+                      className="btn btn-danger" 
+                      onClick={() => {
+                        let justificativa = '';
+                        if (selectedVenda.nf_emitida) {
+                          justificativa = prompt(
+                            'Esta venda possui NFC-e emitida. Informe a justificativa de cancelamento (mínimo 15 caracteres):',
+                            'Venda cancelada por desistencia do cliente ou erro de digitacao'
+                          ) || '';
+                          
+                          if (!justificativa || justificativa.length < 15) {
+                            if (justificativa) toast.error('Justificativa muito curta (mínimo 15 caracteres).');
+                            return;
+                          }
                         }
-                     }}
-                     disabled={cancelarMutation.isPending}
-                   >
+
+                        if (confirm('Tem certeza que deseja cancelar esta venda? O estoque será devolvido.')) {
+                          cancelarMutation.mutate({ id: selectedVenda.id, justificativa });
+                        }
+                      }}
+                      disabled={cancelarMutation.isPending}
+                    >
                      <Trash2 size={16} />
                      Cancelar Venda
                    </button>
