@@ -85,15 +85,17 @@ export default function Vendas() {
       setSelectedVenda(null);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.erro || 'Erro ao cancelar venda.');
+      const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar venda.';
+      toast.error(msg);
     }
   });
 
   const emitirNFCeMutation = useMutation({
     mutationFn: (id: number) => api.post(`/vendas/${id}/emitir-nfce/`),
     onSuccess: (resp) => {
-      if (resp.data.status === 'error') {
-        toast.error(`Erro: ${resp.data.mensagem}`);
+      if (resp.data.status === 'error' || resp.data.erro || resp.data.mensagem_sefaz) {
+        const msg = resp.data.mensagem_sefaz || resp.data.erro || resp.data.mensagem;
+        toast.error(`Erro: ${msg}`);
       } else {
         toast.success('NFC-e autorizada!');
         if (resp.data.url_pdf) window.open(resp.data.url_pdf, '_blank');
@@ -101,8 +103,9 @@ export default function Vendas() {
         setSelectedVenda(null);
       }
     },
-    onError: () => {
-      toast.error('Erro ao comunicar com a SEFAZ.');
+    onError: (err: any) => {
+      const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || 'Erro ao comunicar com a SEFAZ.';
+      toast.error(msg);
     }
   });
 

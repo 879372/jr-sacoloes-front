@@ -233,15 +233,16 @@ export default function PDV() {
           try {
               const respFiscal = await api.post(`/vendas/${respVenda.data.id}/emitir-nfce/`);
               
-              if (respFiscal.data.status === 'error' || respFiscal.data.erro) {
-                  toast.error(`Erro Fiscal: ${respFiscal.data.erro || respFiscal.data.mensagem}`);
+              if (respFiscal.data.status === 'error' || respFiscal.data.erro || respFiscal.data.mensagem_sefaz) {
+                  const msg = respFiscal.data.mensagem_sefaz || respFiscal.data.erro || respFiscal.data.mensagem;
+                  toast.error(`Erro Fiscal: ${msg}`);
               } else {
                   toast.success('NFC-e Emitida com Sucesso!');
                   const url = respFiscal.data.url_consulta || respFiscal.data.url_pdf;
                   if (url) window.open(url, '_blank');
               }
           } catch (err: any) {
-              const msg = err.response?.data?.erro || 'Erro ao processar emissão fiscal no servidor.';
+              const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao processar emissão fiscal no servidor.';
               toast.error(msg);
           }
       }

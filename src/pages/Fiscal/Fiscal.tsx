@@ -309,7 +309,8 @@ export default function Fiscal() {
                                      toast.success('Solicitação de cancelamento enviada!');
                                      refetchNotas();
                                    } catch (err: any) {
-                                     toast.error(err.response?.data?.erro || 'Erro ao cancelar nota.');
+                                     const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar nota.';
+                                     toast.error(msg);
                                    }
                                  }
                                }}
@@ -440,7 +441,7 @@ export default function Fiscal() {
                         refetchVendas();
                     }
                   } catch (err: any) {
-                    const msg = err.response?.data?.erro || 'Erro ao emitir nota.';
+                    const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao emitir nota.';
                     toast.error(msg);
                   }
                 }}
