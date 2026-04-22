@@ -591,6 +591,13 @@ body {
     padding: 64px 14px 24px;
   }
 
+  /* Caso o PDV esteja ativo, removemos o padding para ele ocupar a tela TODA */
+  .main-content:has(.pdv-container) {
+    padding: 0 !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
   /* KPIs em 2 colunas no celular */
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -880,6 +887,10 @@ body {
   .pdv-payment-grid {
     flex-direction: column;
     gap: 16px;
+    /* Adiciona scroll interno para não cortar no mobile */
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
   }
 
   .pdv-payment-summary {

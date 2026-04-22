@@ -435,24 +435,39 @@ export default function Fiscal() {
                         ambiente: 'homologacao'
                     };
 
-                    const endpoint = tipoEmissao === 'NFCe' 
-                      ? `/nfce/emitir/`
-                      : `/nfe/emitir/`;
-                    
-                    const resp = await fiscalApi.post(endpoint, payloadFiscal);
-                    
-                    if (resp.data.status === 'rejeitada' || resp.data.status === 'error') {
-                      toast.error(`Erro: ${resp.data.mensagem_sefaz || resp.data.mensagem}`);
+                    // Se for NFC-e vinculada a uma venda, usamos o endpoint unificado do backend
+                    if (tipoEmissao === 'NFCe' && vendaSelecionada?.id) {
+                        const resp = await api.post(`/vendas/${vendaSelecionada.id}/emitir-nfce/`);
+                        if (resp.data.erro || resp.data.status === 'error') {
+                            toast.error(`Erro: ${resp.data.erro || resp.data.mensagem}`);
+                        } else {
+                            toast.success('NFC-e autorizada!');
+                            const url = resp.data.url_consulta || resp.data.url_pdf;
+                            if (url) window.open(url, '_blank');
+                            setShowEmitirModal(false);
+                            setVendaSelecionada(null);
+                            refetchNotas();
+                            refetchVendas();
+                        }
                     } else {
-                      toast.success(tipoEmissao === 'NFCe' ? 'NFC-e autorizada!' : 'NF-e autorizada!');
-                      if (resp.data.url_consulta) window.open(resp.data.url_consulta, '_blank');
-                      setShowEmitirModal(false);
-                      setVendaSelecionada(null);
-                      refetchNotas();
-                      refetchVendas();
+                        // Para NF-e ou casos sem ID de venda, mantemos o fluxo direto (ou podemos expandir o backend depois)
+                        const endpoint = tipoEmissao === 'NFCe' ? '/nfce/emitir/' : '/nfe/emitir/';
+                        const resp = await fiscalApi.post(endpoint, payloadFiscal);
+                        
+                        if (resp.data.status === 'rejeitada' || resp.data.status === 'error') {
+                            toast.error(`Erro: ${resp.data.mensagem_sefaz || resp.data.mensagem}`);
+                        } else {
+                            toast.success(tipoEmissao === 'NFCe' ? 'NFC-e autorizada!' : 'NF-e autorizada!');
+                            if (resp.data.url_consulta) window.open(resp.data.url_consulta, '_blank');
+                            setShowEmitirModal(false);
+                            setVendaSelecionada(null);
+                            refetchNotas();
+                            refetchVendas();
+                        }
                     }
                   } catch (err: any) {
-                    toast.error(err.response?.data?.mensagem || 'Erro ao emitir nota.');
+                    const msg = err.response?.data?.erro || err.response?.data?.mensagem || 'Erro ao emitir nota.';
+                    toast.error(msg);
                   }
                 }}
                >

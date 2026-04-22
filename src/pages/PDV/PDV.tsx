@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
-import fiscalApi from '../../services/fiscalApi';
 import { 
   ShoppingCart, 
   Search, 
@@ -77,6 +76,8 @@ export default function PDV() {
   const [formaPagto, setFormaPagto] = useState('DINHEIRO');
   const [valorPago, setValorPago] = useState('');
   const [clienteId, setClienteId] = useState<number | string | null>(null);
+  const [buscaCliente, setBuscaCliente] = useState('Consumidor Final');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
 
   // Clientes
   const { data: clientes } = useQuery({
@@ -230,48 +231,17 @@ export default function PDV() {
       
       if (emitirFiscal) {
           try {
-              toast.info('Enviando dados fiscais para ACBr...');
+              const respFiscal = await api.post(`/vendas/${respVenda.data.id}/emitir-nfce/`);
               
-              // 1. Mapear itens para o formato ACBr
-              const itensFiscal = carrinho.map((item, idx) => ({
-                  codigo: item.produto_id?.toString() || idx.toString(),
-                  descricao: item.nome,
-                  ncm: '00000000', // Padrão se não houver no cadastro
-                  cfop: '5102',     // Venda normal
-                  unidade: item.unidade || 'UN',
-                  quantidade: item.quantidade.toString(),
-                  valor_unitario: item.preco_unitario.toFixed(2),
-                  valor_total: item.subtotal.toFixed(2),
-                  cst_icms: '00',
-              }));
-
-              const payloadFiscal = {
-                  cnpj_emitente: import.meta.env.VITE_EMPRESA_CNPJ || '00000000000000',
-                  itens: itensFiscal,
-                  total: total.toFixed(2),
-                  pagamento: pagamentosRealizados.map(p => ({
-                      forma: p.forma === 'DINHEIRO' ? '01' : 
-                             p.forma === 'CARTAO_CREDITO' ? '03' :
-                             p.forma === 'CARTAO_DEBITO' ? '04' :
-                             p.forma === 'PIX' ? '17' : '99',
-                      valor: p.valor.toFixed(2)
-                  })),
-                  ambiente: 'homologacao'
-              };
-
-              // 2. Emitir via nova API Fiscal (Monitor Local ou Cloud Simplificado)
-              const respFiscal = await fiscalApi.post('/nfce/emitir/', payloadFiscal);
-              
-              if (respFiscal.data.status === 'error') {
-                  toast.error(`Erro Fiscal: ${respFiscal.data.mensagem_sefaz || respFiscal.data.mensagem}`);
+              if (respFiscal.data.status === 'error' || respFiscal.data.erro) {
+                  toast.error(`Erro Fiscal: ${respFiscal.data.erro || respFiscal.data.mensagem}`);
               } else {
                   toast.success('NFC-e Emitida com Sucesso!');
-                  if (respFiscal.data.url_consulta) {
-                      window.open(respFiscal.data.url_consulta, '_blank');
-                  }
+                  const url = respFiscal.data.url_consulta || respFiscal.data.url_pdf;
+                  if (url) window.open(url, '_blank');
               }
           } catch (err: any) {
-              const msg = err.response?.data?.detail || err.response?.data?.mensagem || 'Erro ao comunicar com API Fiscal.';
+              const msg = err.response?.data?.erro || 'Erro ao processar emissão fiscal no servidor.';
               toast.error(msg);
           }
       }
@@ -284,6 +254,8 @@ export default function PDV() {
       setCarrinho([]);
       setVenda(null);
       setClienteId(null);
+      setBuscaCliente('Consumidor Final');
+      setShowClienteDropdown(false);
       setShowPagamento(false);
       setActiveTab('search');
       setTimeout(() => buscaRef.current?.focus(), 100);
@@ -679,19 +651,71 @@ export default function PDV() {
                 
                 {/* Coluna Esquerda: Lançamento de Pagamento */}
                 <div style={{ flex: 1 }}>
-                   <div className="form-group" style={{ marginBottom: 16 }}>
+                   <div className="form-group" style={{ marginBottom: 16, position: 'relative' }}>
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Identificar Cliente</label>
-                      <select 
-                        className="select" 
-                        style={{ height: 44, borderRadius: 10 }}
-                        value={clienteId || ''}
-                        onChange={e => setClienteId(e.target.value || null)}
-                      >
-                         <option value="">Consumidor Final</option>
-                         {clientes?.map((c: any) => (
-                           <option key={c.id} value={c.id}>{c.nome}</option>
-                         ))}
-                      </select>
+                      <div className="search-input-wrapper" style={{ margin: 0 }}>
+                         <Search size={16} className="search-icon" />
+                         <input 
+                            className="input"
+                            style={{ height: 44, borderRadius: 10, paddingLeft: 36 }}
+                            placeholder="Pesquisar cliente..."
+                            value={buscaCliente}
+                            onChange={e => {
+                               setBuscaCliente(e.target.value);
+                               setShowClienteDropdown(true);
+                            }}
+                            onFocus={e => {
+                               if (buscaCliente === 'Consumidor Final') e.target.select();
+                               setShowClienteDropdown(true);
+                            }}
+                         />
+                         {clienteId && (
+                            <button 
+                              onClick={() => {
+                                 setClienteId(null);
+                                 setBuscaCliente('Consumidor Final');
+                              }}
+                              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}
+                            >
+                               <X size={16} className="text-muted" />
+                            </button>
+                         )}
+                      </div>
+
+                      {showClienteDropdown && (
+                        <div style={{ 
+                          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, 
+                          background: 'var(--bg-card)', border: '1px solid var(--border)', 
+                          borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.4)'
+                        }}>
+                           <div 
+                             style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '0.85rem' }}
+                             onClick={() => {
+                                setClienteId(null);
+                                setBuscaCliente('Consumidor Final');
+                                setShowClienteDropdown(false);
+                             }}
+                           >
+                             Consumidor Final
+                           </div>
+                           {(clientes || [])
+                            .filter((c: any) => c.nome.toLowerCase().includes(buscaCliente.toLowerCase()))
+                            .map((c: any) => (
+                              <div 
+                                key={c.id} 
+                                style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '0.85rem' }}
+                                onClick={() => {
+                                   setClienteId(c.id);
+                                   setBuscaCliente(c.nome);
+                                   setShowClienteDropdown(false);
+                                }}
+                              >
+                                {c.nome}
+                              </div>
+                           ))}
+                        </div>
+                      )}
                    </div>
 
                    <div className="form-group" style={{ marginBottom: 16 }}>
