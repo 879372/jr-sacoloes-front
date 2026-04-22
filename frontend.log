@@ -8,3 +8,94 @@
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.0.12:5173/
   ➜  Network: http://169.254.132.218:5173/
+4:38:32 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:38:32 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:39:15 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:39:15 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:39:21 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:39:21 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:46:35 PM [vite] (client) hmr update /src/pages/Fiscal/Fiscal.tsx
+4:46:35 PM [vite] Internal server error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Unexpected token
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/pages/Fiscal/Fiscal.tsx:445:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m445 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m<[0m/[38;5;249md[0m[38;5;249mi[0m[38;5;249mv[0m[38;5;249m>[0m
+ [38;5;240m    │[0m           ┬  
+ [38;5;240m    │[0m           ╰── 
+[38;5;246m─────╯[0m
+
+  Plugin: vite:oxc
+  File: /Users/josekaio/Documents/JRSACOLOES/frontend/src/pages/Fiscal/Fiscal.tsx
+      at transformWithOxc (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3720:19)
+      at TransformPluginContext.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3788:26)
+      at EnvironmentPluginContainer.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:30048:51)
+      at async loadAndTransform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24177:26)
+      at async viteTransformMiddleware (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24986:20)
+4:46:35 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Fiscal/Fiscal.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:46:35 PM [vite] Internal server error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Unexpected token
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/pages/Fiscal/Fiscal.tsx:445:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m445 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m<[0m/[38;5;249md[0m[38;5;249mi[0m[38;5;249mv[0m[38;5;249m>[0m
+ [38;5;240m    │[0m           ┬  
+ [38;5;240m    │[0m           ╰── 
+[38;5;246m─────╯[0m
+
+  Plugin: vite:oxc
+  File: /Users/josekaio/Documents/JRSACOLOES/frontend/src/pages/Fiscal/Fiscal.tsx
+      at transformWithOxc (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3720:19)
+      at TransformPluginContext.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3788:26)
+      at EnvironmentPluginContainer.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:30048:51)
+      at async loadAndTransform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24177:26)
+      at async viteTransformMiddleware (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24986:20)
+4:46:35 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Fiscal/Fiscal.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:46:35 PM [vite] Internal server error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Unexpected token
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/pages/Fiscal/Fiscal.tsx:445:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m445 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m<[0m/[38;5;249md[0m[38;5;249mi[0m[38;5;249mv[0m[38;5;249m>[0m
+ [38;5;240m    │[0m           ┬  
+ [38;5;240m    │[0m           ╰── 
+[38;5;246m─────╯[0m
+
+  Plugin: vite:oxc
+  File: /Users/josekaio/Documents/JRSACOLOES/frontend/src/pages/Fiscal/Fiscal.tsx
+      at transformWithOxc (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3720:19)
+      at TransformPluginContext.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:3788:26)
+      at EnvironmentPluginContainer.transform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:30048:51)
+      at async loadAndTransform (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24177:26)
+      at async viteTransformMiddleware (file:///Users/josekaio/Documents/JRSACOLOES/frontend/node_modules/vite/dist/node/chunks/node.js:24986:20)
+4:46:35 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Fiscal/Fiscal.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:46:50 PM [vite] (client) hmr update /src/pages/Fiscal/Fiscal.tsx
+4:52:14 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:52:14 PM [vite] (client) [console.warn] The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+4:53:20 PM [vite] (client) hmr update /src/pages/Fiscal/Fiscal.tsx
+4:53:28 PM [vite] (client) hmr update /src/pages/Fiscal/Fiscal.tsx
+4:55:41 PM [vite] (client) hmr update /src/pages/Fiscal/Fiscal.tsx
