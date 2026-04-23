@@ -38,6 +38,7 @@ const STATUS_MAP: Record<string, { label: string, color: string, icon: any }> = 
   cancelada: { label: 'Cancelada', color: 'badge-red', icon: Zap },
   denegada: { label: 'Denegada', color: 'badge-red', icon: AlertCircle },
   rejeitada: { label: 'Rejeitada', color: 'badge-orange', icon: AlertCircle },
+  erro: { label: 'Erro / Rejeitada', color: 'badge-orange', icon: AlertCircle },
   pendente: { label: 'Pendente', color: 'badge-blue', icon: FileText },
 };
 
@@ -57,7 +58,7 @@ export default function Fiscal() {
     queryFn: async () => {
       const resp = await api.get('/vendas/', { 
         params: { 
-          nf_emitida: true, 
+          fiscal: true, 
           nf_tipo: activeTab,
           data_inicio: periodo.de,
           data_fim: periodo.ate
