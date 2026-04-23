@@ -149,7 +149,9 @@ export default function PDV() {
         quantidade: parseFloat(i.quantidade),
         preco_unitario: parseFloat(i.preco_unitario),
         subtotal: parseFloat(i.subtotal),
-        unidade: i.produto?.unidade_medida || 'UN'
+        unidade: i.produto?.unidade_medida || 'UN',
+        ncm: i.produto?.ncm,
+        cfop: i.produto?.cfop_padrao
       })));
     }
   }, [vendaAberta]);
@@ -240,8 +242,6 @@ export default function PDV() {
         if (data.nf_status === 'AUTORIZADA') {
           toast.success('NFC-e Emitida com Sucesso!');
           if (data.nf_url_pdf) window.open(data.nf_url_pdf, '_blank');
-        } else if (data.nf_status === 'ERRO' || data.nf_mensagem) {
-          toast.warning(`Venda finalizada, mas NFC-e com erro: ${data.nf_mensagem || 'Verifique o módulo fiscal.'}`);
         }
       }
       return respVenda;
@@ -426,7 +426,9 @@ export default function PDV() {
                 quantidade: quantityToAdd,
                 preco_unitario: preco,
                 subtotal: preco * quantityToAdd,
-                unidade: produto.unidade_medida
+                unidade: produto.unidade_medida,
+                ncm: (produto as any).ncm,
+                cfop: (produto as any).cfop_padrao
               }];
           });
           
@@ -905,17 +907,14 @@ export default function PDV() {
                <button className="btn btn-ghost" style={{ flex: 1, height: 48 }} onClick={() => {
                   // Valida NCM e CFOP antes de emitir fiscal (evita rejeição previsível da SEFAZ)
                   const itensSemNcm = carrinho.filter(item => {
-                    // Verifica se o produto no resultado tem NCM válido
-                    const prod = resultados.find(p => p.id === item.produto_id) as any;
-                    return !prod?.ncm || prod.ncm === '00000000' || !prod?.cfop_padrao;
+                    return !item.ncm || item.ncm === '00000000' || !item.cfop;
                   });
 
                   if (itensSemNcm.length > 0) {
-                    toast.warning(
-                      `⚠️ ${itensSemNcm.length} item(ns) sem NCM/CFOP fiscal. Verifique o cadastro antes de emitir. A venda será finalizada SEM nota.`,
-                      { duration: 6000 }
+                    toast.error(
+                      `⚠️ ${itensSemNcm.length} item(ns) com cadastro fiscal incompleto (NCM/CFOP). A venda NÃO pode ser finalizada com nota. Corrija o cadastro dos produtos antes de prosseguir.`,
+                      { duration: 8000 }
                     );
-                    finalizarVendaMutation.mutate(false);
                     return;
                   }
                   finalizarVendaMutation.mutate(true);
