@@ -112,13 +112,32 @@ export default function Fiscal() {
   };
 
   const exportarXML = () => {
-    const emitidas = notas.filter(n => n.status === 'autorizada');
+    const emitidas = notas.filter(n => n.nf_status === 'AUTORIZADA' && n.nf_chave);
     if (emitidas.length === 0) {
-      toast.warning(`Nenhuma ${activeTab.toUpperCase()} autorizada para exportação.`);
+      toast.warning(`Nenhuma ${activeTab.toUpperCase()} autorizada para exportação neste período.`);
       return;
     }
-    toast.info(`${emitidas.length} notas localizadas. Prepare o download dos XMLs no dashboard da ACBr.`);
+    
+    // Gera CSV com as chaves de acesso para o contador importar no sistema dele
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Data Emissao,Numero,Serie,Chave de Acesso,Valor Total,Status\n";
+    
+    emitidas.forEach(n => {
+      const dataEmissao = new Date(n.created_at || n.data).toLocaleDateString('pt-BR');
+      csvContent += `${dataEmissao},${n.nf_numero || ''},${n.nf_serie || ''},${n.nf_chave},${n.total},${n.nf_status}\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `exportacao_${activeTab}_chaves_${periodo.de}_a_${periodo.ate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success('Relatório CSV com Chaves de Acesso exportado com sucesso!');
   };
+
 
   const handleEnviarEmail = async (n: any) => {
     const email = prompt('Informe o e-mail do destinatário:');

@@ -60,6 +60,10 @@ export default function PDV() {
   const [cashOpType, setCashOpType] = useState<'SANGRIA' | 'SUPRIMENTO'>('SANGRIA');
   const [modalFecharCaixaOpen, setModalFecharCaixaOpen] = useState(false);
   const [modalCancelarVendaOpen, setModalCancelarVendaOpen] = useState(false);
+  
+  // Impressão Não-Fiscal
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printData, setPrintData] = useState<any>(null);
 
   // Persistência local do estado da venda
   useEffect(() => {
@@ -242,8 +246,21 @@ export default function PDV() {
       }
       return respVenda;
     },
-    onSuccess: () => {
+    onSuccess: (respVenda, emitirFiscal) => {
       toast.success('Venda finalizada!');
+
+      // Exibir Modal de Impressão de recibo não-fiscal se não for emissão fiscal
+      if (!emitirFiscal) {
+        setPrintData({
+          carrinho: [...carrinho],
+          pagamentosRealizados: [...pagamentosRealizados],
+          total,
+          troco,
+          dataHora: new Date().toLocaleString('pt-BR')
+        });
+        setShowPrintModal(true);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['venda-aberta'] });
       setPagamentosRealizados([]);
       setCarrinho([]);
@@ -262,6 +279,95 @@ export default function PDV() {
 
 
   // Handlers
+  const handlePrintReceipt = () => {
+    if (!printData) return;
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    if (iframe.contentWindow) {
+      const itemsHtml = printData.carrinho.map((i: any) => 
+        `<tr>
+           <td style="padding: 2px 0;">${i.nome.substring(0, 20)}</td>
+           <td style="text-align: center;">${i.quantidade}</td>
+           <td style="text-align: right;">R$ ${i.subtotal.toFixed(2)}</td>
+         </tr>`
+      ).join('');
+
+      const paymentsHtml = printData.pagamentosRealizados.map((p: any) =>
+        `<div style="display: flex; justify-content: space-between;">
+           <span>${p.forma}</span>
+           <span>R$ ${p.valor.toFixed(2)}</span>
+         </div>`
+      ).join('');
+
+      iframe.contentWindow.document.write(`
+        <html>
+          <head>
+            <title>Recibo de Venda</title>
+            <style>
+              body { font-family: monospace; font-size: 12px; margin: 0; padding: 10px; width: 300px; }
+              .text-center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="text-center bold" style="font-size: 14px;">JR SACOLÕES</div>
+            <div class="text-center">Comprovante de Venda Não-Fiscal</div>
+            <div class="text-center">${printData.dataHora}</div>
+            <div class="text-center bold" style="margin-top: 4px;">*** SEM VALIDADE FISCAL ***</div>
+            
+            <div class="divider"></div>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr>
+                  <th style="text-align: left; padding-bottom: 4px;">Item</th>
+                  <th style="text-align: center; padding-bottom: 4px;">Qtd</th>
+                  <th style="text-align: right; padding-bottom: 4px;">Total</th>
+                </tr>
+              </thead>
+              <tbody>${itemsHtml}</tbody>
+            </table>
+            
+            <div class="divider"></div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 14px;" class="bold">
+              <span>TOTAL A PAGAR:</span>
+              <span>R$ ${printData.total.toFixed(2)}</span>
+            </div>
+            
+            <div class="divider"></div>
+            <div class="bold">Pagamentos:</div>
+            ${paymentsHtml}
+            <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+              <span>TROCO:</span>
+              <span>R$ ${printData.troco.toFixed(2)}</span>
+            </div>
+            
+            <div class="divider"></div>
+            <div class="text-center" style="margin-top: 10px;">Obrigado pela preferência!</div>
+            <div style="margin-top: 20px; text-align: center;">.</div>
+          </body>
+        </html>
+      `);
+      iframe.contentWindow.document.close();
+      
+      iframe.contentWindow.focus();
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      }, 250);
+    }
+    
+    setShowPrintModal(false);
+    setPrintData(null);
+  };
+
   const handleAbrirCaixa = () => {
     abrirCaixaMutation.mutate(parseFloat(fundoInicial || '0'));
   };
@@ -870,31 +976,60 @@ export default function PDV() {
 
       {modalCancelarVendaOpen && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2>Cancelar Venda</h2>
-              <button className="btn-icon" onClick={() => setModalCancelarVendaOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body" style={{ padding: '20px 0', fontSize: '1.05rem', color: 'var(--text-secondary)' }}>
-              Tem certeza que deseja cancelar esta venda em aberto?
-            </div>
-            <div className="modal-footer" style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalCancelarVendaOpen(false)}>
-                Voltar
-              </button>
-              <button 
-                className="btn" 
-                style={{ flex: 1, background: 'var(--accent-red)', color: 'white', fontWeight: 600 }}
-                onClick={() => {
-                  setModalCancelarVendaOpen(false);
-                  cancelarVendaMutation.mutate();
-                }}
-              >
-                Cancelar Venda
-              </button>
-            </div>
+          <div className="modal-content" style={{ maxWidth: 400, textAlign: 'center' }}>
+             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+               <div style={{ padding: 16, background: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%', color: 'var(--accent-red)' }}>
+                  <AlertTriangle size={32} />
+               </div>
+             </div>
+             <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 12 }}>Cancelar Venda?</h3>
+             <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem' }}>
+               A venda atual será descartada e todos os itens serão removidos. Esta ação não pode ser desfeita.
+             </p>
+             <div style={{ display: 'flex', gap: 10 }}>
+               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalCancelarVendaOpen(false)}>
+                 Voltar
+               </button>
+               <button className="btn btn-primary" style={{ flex: 1, background: 'var(--accent-red)' }} onClick={() => {
+                 setCarrinho([]);
+                 setVenda(null);
+                 setPagamentosRealizados([]);
+                 setBuscaCliente('Consumidor Final');
+                 setClienteId(null);
+                 setModalCancelarVendaOpen(false);
+                 setActiveTab('search');
+                 buscaRef.current?.focus();
+               }}>
+                 Sim, Cancelar
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {showPrintModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 400, textAlign: 'center' }}>
+             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+               <div style={{ padding: 16, background: 'rgba(59, 130, 246, 0.1)', borderRadius: '50%', color: 'var(--accent)' }}>
+                  <FileText size={32} />
+               </div>
+             </div>
+             <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 12 }}>Venda Concluída!</h3>
+             <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem' }}>
+               Deseja imprimir o comprovante não-fiscal desta venda?
+             </p>
+             <div style={{ display: 'flex', gap: 10 }}>
+               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => {
+                 setShowPrintModal(false);
+                 setPrintData(null);
+               }}>
+                 Não Imprimir
+               </button>
+               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePrintReceipt}>
+                 Sim, Imprimir
+               </button>
+             </div>
           </div>
         </div>
       )}
