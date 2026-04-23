@@ -112,7 +112,7 @@ export default function Clientes() {
         <div className="table-wrapper">
           <table className="table">
             <thead>
-              <tr><th>Cliente / Razão Social</th><th>CPF/CNPJ</th><th>Cidade/UF</th><th>Telefone</th><th>Status</th><th style={{ textAlign: 'right' }}>Ações</th></tr>
+              <tr><th>Cliente / Razão Social</th><th>CPF/CNPJ</th><th>Telefone / Cidade</th><th>Status</th><th style={{ textAlign: 'right' }}>Ações</th></tr>
             </thead>
             <tbody>
               {isLoading ? (
@@ -124,10 +124,11 @@ export default function Clientes() {
               ) : (
                 data?.results.map((c) => (
                   <tr key={c.id}>
-                    <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.codigo_legado || '—'}</td>
                     <td>
                         <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{c.nome}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                          {c.codigo_legado ? `#${c.codigo_legado} · ` : ''}{c.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}
+                        </div>
                     </td>
                     <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>

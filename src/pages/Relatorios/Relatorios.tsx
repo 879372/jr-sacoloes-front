@@ -28,6 +28,7 @@ interface Venda {
   total: string;
   created_at: string;
   status: string;
+  nf_emitida: boolean;
   pagamentos: Pagamento[];
 }
 
@@ -49,14 +50,16 @@ export default function Relatorios() {
   const queryClient = useQueryClient();
 
   const cancelarVendaMutation = useMutation({
-    mutationFn: (id: number) => api.post(`/vendas/${id}/cancelar/`),
+    mutationFn: ({ id, justificativa }: { id: number; justificativa?: string }) =>
+      api.post(`/vendas/${id}/cancelar/`, justificativa ? { justificativa } : {}),
     onSuccess: () => {
       toast.success('Venda cancelada com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['relatorios-vendas'] });
       setVendaParaCancelar(null);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.erro || 'Erro ao cancelar venda.');
+      const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar venda.';
+      toast.error(msg);
       setVendaParaCancelar(null);
     },
   });
@@ -343,7 +346,22 @@ export default function Relatorios() {
                 id="btn-confirmar-cancelamento"
                 className="btn btn-primary"
                 style={{ flex: 1, background: 'var(--accent-red)', borderColor: 'var(--accent-red)' }}
-                onClick={() => cancelarVendaMutation.mutate(vendaParaCancelar!.id)}
+                onClick={() => {
+                  // Se a venda tem NFC-e emitida, exige justificativa
+                  if (vendaParaCancelar!.nf_emitida) {
+                    const justificativa = prompt(
+                      'Esta venda possui NFC-e emitida. Informe a justificativa (mínimo 15 caracteres):',
+                      'Venda cancelada por desistencia do cliente ou erro de digitacao'
+                    );
+                    if (!justificativa || justificativa.length < 15) {
+                      if (justificativa !== null) toast.error('Justificativa muito curta (mínimo 15 caracteres).');
+                      return;
+                    }
+                    cancelarVendaMutation.mutate({ id: vendaParaCancelar!.id, justificativa });
+                  } else {
+                    cancelarVendaMutation.mutate({ id: vendaParaCancelar!.id });
+                  }
+                }}
                 disabled={cancelarVendaMutation.isPending}
               >
                 {cancelarVendaMutation.isPending ? 'Cancelando...' : 'Confirmar Cancelamento'}

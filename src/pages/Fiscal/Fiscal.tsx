@@ -429,11 +429,12 @@ export default function Fiscal() {
                       tipo: tipoEmissao
                     });
 
-                    if (resp.data.erro) {
-                        toast.error(`Erro: ${resp.data.erro}`);
+                    if (resp.data.erro || resp.data.mensagem_sefaz) {
+                        const msg = resp.data.mensagem_sefaz || resp.data.erro;
+                        toast.error(`Erro: ${msg}`);
                     } else {
                         toast.success(`${tipoEmissao.toUpperCase()} autorizada com sucesso!`);
-                        const url = resp.data.url_consulta || resp.data.url_pdf;
+                        const url = resp.data.url_consulta || resp.data.url_pdf || resp.data.nf_url_pdf;
                         if (url) window.open(url, '_blank');
                         setShowEmitirModal(false);
                         setVendaSelecionada(null);

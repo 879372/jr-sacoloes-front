@@ -228,23 +228,17 @@ export default function PDV() {
         emitir_fiscal: emitirFiscal,
         cliente: clienteId
       });
-      
+
+      // A emissão fiscal é feita pelo backend dentro do endpoint /finalizar/
+      // quando emitir_fiscal=True. Apenas lemos o resultado aqui.
       if (emitirFiscal) {
-          try {
-              const respFiscal = await api.post(`/vendas/${respVenda.data.id}/emitir-nfce/`);
-              
-              if (respFiscal.data.status === 'error' || respFiscal.data.erro || respFiscal.data.mensagem_sefaz) {
-                  const msg = respFiscal.data.mensagem_sefaz || respFiscal.data.erro || respFiscal.data.mensagem;
-                  toast.error(`Erro Fiscal: ${msg}`);
-              } else {
-                  toast.success('NFC-e Emitida com Sucesso!');
-                  const url = respFiscal.data.url_consulta || respFiscal.data.url_pdf;
-                  if (url) window.open(url, '_blank');
-              }
-          } catch (err: any) {
-              const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao processar emissão fiscal no servidor.';
-              toast.error(msg);
-          }
+        const data = respVenda.data;
+        if (data.nf_status === 'AUTORIZADA') {
+          toast.success('NFC-e Emitida com Sucesso!');
+          if (data.nf_url_pdf) window.open(data.nf_url_pdf, '_blank');
+        } else if (data.nf_status === 'ERRO' || data.nf_mensagem) {
+          toast.warning(`Venda finalizada, mas NFC-e com erro: ${data.nf_mensagem || 'Verifique o módulo fiscal.'}`);
+        }
       }
       return respVenda;
     },
@@ -265,6 +259,7 @@ export default function PDV() {
       toast.error(err.response?.data?.erro || 'Erro ao finalizar venda.');
     }
   });
+
 
   // Handlers
   const handleAbrirCaixa = () => {
@@ -801,7 +796,24 @@ export default function PDV() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24, flexDirection: window.innerWidth < 768 ? 'column' : 'row' }}>
-               <button className="btn btn-ghost" style={{ flex: 1, height: 48 }} onClick={() => finalizarVendaMutation.mutate(true)} disabled={totalJaPago < total || finalizarVendaMutation.isPending}>
+               <button className="btn btn-ghost" style={{ flex: 1, height: 48 }} onClick={() => {
+                  // Valida NCM e CFOP antes de emitir fiscal (evita rejeição previsível da SEFAZ)
+                  const itensSemNcm = carrinho.filter(item => {
+                    // Verifica se o produto no resultado tem NCM válido
+                    const prod = resultados.find(p => p.id === item.produto_id) as any;
+                    return !prod?.ncm || prod.ncm === '00000000' || !prod?.cfop_padrao;
+                  });
+
+                  if (itensSemNcm.length > 0) {
+                    toast.warning(
+                      `⚠️ ${itensSemNcm.length} item(ns) sem NCM/CFOP fiscal. Verifique o cadastro antes de emitir. A venda será finalizada SEM nota.`,
+                      { duration: 6000 }
+                    );
+                    finalizarVendaMutation.mutate(false);
+                    return;
+                  }
+                  finalizarVendaMutation.mutate(true);
+                }} disabled={totalJaPago < total || finalizarVendaMutation.isPending}>
                   <FileText size={18} />
                   Fiscal + Fechar
                </button>
