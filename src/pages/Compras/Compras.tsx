@@ -111,7 +111,7 @@ export default function Compras() {
       const resp = await fiscalApi.get('/cloud/distribuicao/nfe/', { 
         params: { 
           cpf_cnpj: import.meta.env.VITE_EMPRESA_CNPJ?.replace(/\D/g, '') || '00000000000000', 
-          ambiente: 'homologacao' 
+          ambiente: import.meta.env.VITE_FISCAL_AMBIENTE || 'producao' 
         } 
       });
       
