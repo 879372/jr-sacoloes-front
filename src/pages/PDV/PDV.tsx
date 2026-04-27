@@ -19,8 +19,10 @@ import {
   Plus,
   Trash2,
   Lock,
-  Loader2
+  Loader2,
+  Printer
 } from 'lucide-react';
+import { thermalPrinter } from '../../lib/thermalPrint';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Produto, ItemCarrinho, Sessao, Venda, Pagamento } from './types';
 import CashOpsModal from './CashOpsModal';
@@ -97,6 +99,8 @@ export default function PDV() {
   });
   
   const buscaRef = useRef<HTMLInputElement>(null);
+  const lastScanRef = useRef<{ code: string, time: number }>({ code: '', time: 0 });
+  const isProcessingScanRef = useRef(false);
   const valorPagoRef = useRef<HTMLInputElement>(null);
 
   // Totais
@@ -429,6 +433,51 @@ export default function PDV() {
     setClienteTelefone('');
   };
 
+  const handlePrintUSB = async () => {
+    if (!printData) return;
+    
+    try {
+      let cupom = `     JR SACOLOES\n`;
+      cupom += `   Comprovante de Venda\n`;
+      cupom += `--------------------------------\n`;
+      cupom += `Data: ${printData.dataHora}\n`;
+      cupom += `Venda: #${printData.id || 'N/A'}\n`;
+      cupom += `--------------------------------\n`;
+      
+      printData.carrinho.forEach((item: any) => {
+        const nome = (item.produto?.nome || 'Item').substring(0, 18).padEnd(18, ' ');
+        const totalItem = (item.subtotal || 0).toFixed(2).padStart(8, ' ');
+        cupom += `${nome} ${totalItem}\n`;
+        cupom += `  ${item.quantidade.toFixed(3)} x ${item.preco_unitario.toFixed(2)}\n`;
+      });
+      
+      cupom += `--------------------------------\n`;
+      cupom += `SUBTOTAL:       R$ ${Number(printData.total || 0).toFixed(2).padStart(10, ' ')}\n`;
+      if (printData.desconto > 0) {
+        cupom += `DESCONTO:     - R$ ${Number(printData.desconto).toFixed(2).padStart(10, ' ')}\n`;
+      }
+      const totalLiq = Number(printData.total || 0) - Number(printData.desconto || 0);
+      cupom += `TOTAL:          R$ ${totalLiq.toFixed(2).padStart(10, ' ')}\n`;
+      cupom += `--------------------------------\n`;
+      cupom += `       OBRIGADO! \n`;
+
+      await thermalPrinter.print(cupom);
+      toast.success('Imprimindo via USB...');
+    } catch (error) {
+      console.error(error);
+      toast.error('Impressora USB não conectada. Clique no ícone de impressora no topo.');
+    }
+  };
+
+  const handleConnectPrinter = async () => {
+    try {
+      await thermalPrinter.requestDevice();
+      toast.success('Impressora USB Conectada!');
+    } catch (e) {
+      toast.error('Falha ao conectar impressora.');
+    }
+  };
+
   const handleAbrirCaixa = () => {
     abrirCaixaMutation.mutate(parseFloat(fundoInicial || '0'));
   };
@@ -539,8 +588,25 @@ export default function PDV() {
 
       // AUTO-ADD: Se retornar exatamente 1 item e o termo de busca for numérico (padrão de código de barras)
       const isBarcode = /^\d+$/.test(searchTerm);
+      const now = Date.now();
+      
+      // Trava de 1 segundo para o MESMO código ou se já estiver processando
       if (data.length === 1 && isBarcode) {
+        if (isProcessingScanRef.current) return;
+        if (lastScanRef.current.code === searchTerm && (now - lastScanRef.current.time) < 1000) {
+          return;
+        }
+
+        lastScanRef.current = { code: searchTerm, time: now };
+        isProcessingScanRef.current = true;
+        
+        setBusca(''); // Limpa o campo imediatamente
         handleAdicionarItem(data[0], multiplier);
+        
+        // Libera o processamento após um pequeno delay
+        setTimeout(() => {
+          isProcessingScanRef.current = false;
+        }, 500);
       }
     } catch { 
       setResultados([]); 
@@ -643,6 +709,11 @@ export default function PDV() {
               <span className="hide-mobile">Fechar Caixa</span>
             </button>
           </div>
+
+          <button className="btn btn-ghost btn-sm" style={{ padding: '6px', color: 'var(--accent)' }} onClick={handleConnectPrinter} title="Conectar Impressora USB">
+             <Printer size={16} />
+          </button>
+
           <button className="btn btn-ghost btn-sm" style={{ padding: '6px' }} onClick={() => navigate('/dashboard')}>
              <LogOut size={16} />
           </button>
@@ -1125,16 +1196,16 @@ export default function PDV() {
                  setShowPrintModal(false);
                  setPrintData(null);
                }}>
-                 Não Imprimir
+                 Fechar
                </button>
-                <button className="btn btn-ghost" style={{ flex: 1, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }} onClick={handleWhatsAppReceipt}>
-                  <Smartphone size={18} />
-                  WhatsApp
-                </button>
-                <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePrintReceipt}>
-                  <FileText size={18} />
-                  Imprimir
-                </button>
+               <button className="btn btn-ghost" style={{ flex: 1, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }} onClick={handleWhatsAppReceipt}>
+                 <Smartphone size={18} />
+                 WhatsApp
+               </button>
+               <button className="btn btn-primary" style={{ flex: 1, background: '#10b981' }} onClick={handlePrintUSB}>
+                 <Printer size={18} />
+                 Imprimir
+               </button>
              </div>
           </div>
         </div>
