@@ -18,6 +18,7 @@ import {
   Minus,
   Plus,
   Trash2,
+  Edit3,
   Lock,
   Loader2,
   Printer
@@ -26,6 +27,7 @@ import { thermalPrinter } from '../../lib/thermalPrint';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Produto, ItemCarrinho, Sessao, Venda, Pagamento } from './types';
 import CashOpsModal from './CashOpsModal';
+import ProdutoModal from '../Produtos/ProdutoModal';
 
 const FORMAS_PAGAMENTO = [
   { key: 'DINHEIRO', label: 'Dinheiro', icon: Banknote, color: 'var(--accent-green)' },
@@ -70,6 +72,8 @@ export default function PDV() {
   // Impressão Não-Fiscal
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
 
   // Persistência local do estado da venda
   useEffect(() => {
@@ -482,6 +486,56 @@ export default function PDV() {
     abrirCaixaMutation.mutate(parseFloat(fundoInicial || '0'));
   };
 
+  const handleEditProduct = async (item: ItemCarrinho) => {
+    try {
+      const { data } = await api.get(`/produtos/${item.produto_id}/`);
+      setEditingProduct(data);
+      setShowEditModal(true);
+    } catch {
+      toast.error('Erro ao carregar dados do produto.');
+    }
+  };
+
+  const handleEditSuccess = async () => {
+    if (!editingProduct) return;
+    
+    try {
+      const { data: updatedProd } = await api.get(`/produtos/${editingProduct.id}/`);
+      
+      // Atualiza o carrinho local
+      setCarrinho(prev => prev.map(item => {
+        if (item.produto_id === updatedProd.id) {
+          const novaPreco = Number(updatedProd.preco_venda);
+          return {
+            ...item,
+            nome: updatedProd.nome,
+            preco_unitario: novaPreco,
+            subtotal: item.quantidade * novaPreco
+          };
+        }
+        return item;
+      }));
+
+      // Atualiza os itens no servidor (opcional, mas bom para consistência)
+      // Se o usuário mudou o preço no cadastro, geralmente queremos que o item no carrinho reflita isso
+      const itensToUpdate = carrinho.filter(i => i.produto_id === updatedProd.id);
+      for (const item of itensToUpdate) {
+        if (item.id) {
+          const novaPreco = Number(updatedProd.preco_venda);
+          await api.patch(`/venda-itens/${item.id}/`, {
+            preco_unitario: novaPreco,
+            subtotal: item.quantidade * novaPreco
+          });
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['venda-aberta'] });
+      toast.success('Produto e carrinho atualizados!');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleRemoverItem = (item: typeof carrinho[0], idx: number) => {
     if (item.id) {
       // Item persistido no servidor — remove via API
@@ -812,11 +866,19 @@ export default function PDV() {
                              <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{item.nome}</div>
                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.quantidade} x R$ {item.preco_unitario.toFixed(2)}</div>
                           </div>
-                          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
                              <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>R$ {item.subtotal.toFixed(2)}</div>
                              <button 
-                                style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: 'var(--accent-red)', padding: 6, borderRadius: 6 }} 
+                                style={{ background: 'rgba(59, 130, 246, 0.1)', border: 'none', color: 'var(--accent)', padding: 6, borderRadius: 6, cursor: 'pointer' }} 
+                                onClick={() => handleEditProduct(item)}
+                                title="Editar Produto"
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                             <button 
+                                style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: 'var(--accent-red)', padding: 6, borderRadius: 6, cursor: 'pointer' }} 
                                 onClick={() => handleRemoverItem(item, idx)}
+                                title="Remover"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -1243,6 +1305,14 @@ export default function PDV() {
             </div>
           </div>
         </div>
+      )}
+
+      {showEditModal && editingProduct && (
+        <ProdutoModal
+          produto={editingProduct}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={handleEditSuccess}
+        />
       )}
     </div>
   );
