@@ -60,6 +60,10 @@ export default function PDV() {
   const [cashOpType, setCashOpType] = useState<'SANGRIA' | 'SUPRIMENTO'>('SANGRIA');
   const [modalFecharCaixaOpen, setModalFecharCaixaOpen] = useState(false);
   const [modalCancelarVendaOpen, setModalCancelarVendaOpen] = useState(false);
+  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
+  const [clienteTelefone, setClienteTelefone] = useState('');
+  const [desconto, setDesconto] = useState(0);
+  const [tipoDesconto, setTipoDesconto] = useState<'VALOR' | 'PERCENTUAL'>('VALOR');
   
   // Impressão Não-Fiscal
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -97,9 +101,11 @@ export default function PDV() {
 
   // Totais
   const total = carrinho.reduce((acc, item) => acc + item.subtotal, 0);
+  const valorDescontoReal = tipoDesconto === 'VALOR' ? desconto : (total * (desconto / 100));
+  const totalLiquido = Math.max(0, total - valorDescontoReal);
   const totalJaPago = pagamentosRealizados.reduce((acc, p) => acc + p.valor, 0);
-  const valorRestante = Math.max(0, total - totalJaPago);
-  const troco = Math.max(0, totalJaPago - total);
+  const valorRestante = Math.max(0, totalLiquido - totalJaPago);
+  const troco = Math.max(0, totalJaPago - totalLiquido);
 
   // 1. Check Active Session
   const { data: sessao, isLoading: loadingSessao } = useQuery<Sessao>({
@@ -232,7 +238,8 @@ export default function PDV() {
       const respVenda = await api.post(`/vendas/${venda?.id}/finalizar/`, {
         pagamentos: pagamentosRealizados,
         emitir_fiscal: emitirFiscal,
-        cliente: clienteId
+        cliente: clienteId,
+        desconto: valorDescontoReal
       });
 
       // A emissão fiscal é feita pelo backend dentro do endpoint /finalizar/
@@ -244,22 +251,34 @@ export default function PDV() {
           if (data.nf_url_pdf) window.open(data.nf_url_pdf, '_blank');
         }
       }
+      
+      // Salva os dados da venda finalizada para o compartilhamento
+      console.log('VENDA FINALIZADA (SERVER RESPONSE):', respVenda.data);
+      setPrintData({
+        ...respVenda.data,
+        carrinho: [...carrinho],
+        pagamentosRealizados: [...pagamentosRealizados],
+        total,
+        troco,
+        dataHora: new Date().toLocaleString('pt-BR')
+      });
+
       return respVenda;
     },
     onSuccess: (respVenda, emitirFiscal) => {
       toast.success('Venda finalizada!');
+      setShowPagamento(false);
 
-      // Exibir Modal de Impressão de recibo não-fiscal se não for emissão fiscal
-      if (!emitirFiscal) {
-        setPrintData({
-          carrinho: [...carrinho],
-          pagamentosRealizados: [...pagamentosRealizados],
-          total,
-          troco,
-          dataHora: new Date().toLocaleString('pt-BR')
-        });
-        setShowPrintModal(true);
-      }
+      // Sempre prepara os dados de impressão/compartilhamento e exibe o modal de sucesso
+      setPrintData({
+        ...respVenda.data,
+        carrinho: [...carrinho],
+        pagamentosRealizados: [...pagamentosRealizados],
+        total,
+        troco,
+        dataHora: new Date().toLocaleString('pt-BR')
+      });
+      setShowPrintModal(true);
 
       queryClient.invalidateQueries({ queryKey: ['venda-aberta'] });
       setPagamentosRealizados([]);
@@ -268,8 +287,8 @@ export default function PDV() {
       setClienteId(null);
       setBuscaCliente('Consumidor Final');
       setShowClienteDropdown(false);
-      setShowPagamento(false);
-      setActiveTab('search');
+      setDesconto(0);
+      setTipoDesconto('VALOR');
       setTimeout(() => buscaRef.current?.focus(), 100);
     },
     onError: (err: any) => {
@@ -366,6 +385,48 @@ export default function PDV() {
     
     setShowPrintModal(false);
     setPrintData(null);
+  };
+
+  const handleWhatsAppReceipt = () => {
+    if (!printData) return;
+    
+    // Pegar o telefone do cliente selecionado se houver
+    if (clienteId && clientes) {
+        const c = clientes.find((cli: any) => cli.id === clienteId);
+        if (c?.telefone) setClienteTelefone(c.telefone.replace(/\D/g, ''));
+    }
+
+    setShowWhatsappModal(true);
+  };
+
+  const handleSendWhatsapp = () => {
+    if (!printData) return;
+
+    // Constrói o link: prioriza PDF fiscal, senão link do comprovante online
+    const publicUrl = import.meta.env.VITE_PUBLIC_URL;
+    const apiBase = publicUrl || (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
+    const idExterno = printData.id_externo;
+
+    if (!printData.nf_url_pdf && !idExterno) {
+        toast.error('Não foi possível gerar o link do comprovante. Tente imprimir o cupom físico.');
+        return;
+    }
+
+    const linkComprovante = printData.nf_url_pdf || `${apiBase}/api/comprovante/${idExterno}/`;
+    const descontoMsg = printData.desconto > 0 ? `Desconto: R$ ${Number(printData.desconto).toFixed(2)}\n` : '';
+
+    const texto = `*JR SACOLÕES - Seu Comprovante*\n\n` +
+      `Olá! Segue o link do seu comprovante de compra:\n\n` +
+      `${linkComprovante}\n\n` +
+      descontoMsg +
+      `Obrigado pela preferência!`;
+
+    const encodedText = encodeURIComponent(texto);
+    const fone = clienteTelefone.replace(/\D/g, '');
+    
+    window.open(`https://wa.me/${fone ? '55' + fone : ''}?text=${encodedText}`, '_blank');
+    setShowWhatsappModal(false);
+    setClienteTelefone('');
   };
 
   const handleAbrirCaixa = () => {
@@ -565,13 +626,17 @@ export default function PDV() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Menu de Ações (Oculto em telas muito pequenas, ou em dropdown futuramente) */}
           <div className="pdv-actions-desktop" style={{ display: 'flex', gap: 4 }}>
-            <button className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', color: 'var(--accent-red)' }} onClick={() => { setCashOpType('SANGRIA'); setShowCashOp(true); }}>
+            <button className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', color: 'var(--accent-yellow)' }} onClick={() => { setCashOpType('SANGRIA'); setShowCashOp(true); }}>
               <Minus size={14} />
               <span className="hide-mobile">Sangria</span>
             </button>
             <button className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', color: 'var(--accent-green)' }} onClick={() => { setCashOpType('SUPRIMENTO'); setShowCashOp(true); }}>
               <Plus size={14} />
               <span className="hide-mobile">Suprimento</span>
+            </button>
+            <button className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', color: 'var(--accent-red)' }} onClick={() => setModalCancelarVendaOpen(true)}>
+              <Trash2 size={14} />
+              <span className="hide-mobile">Cancelar</span>
             </button>
             <button className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', color: 'var(--accent-yellow)' }} onClick={() => setModalFecharCaixaOpen(true)}>
               <Lock size={14} />
@@ -822,7 +887,34 @@ export default function PDV() {
                       )}
                    </div>
 
-                   <div className="form-group" style={{ marginBottom: 16 }}>
+                   <div className="form-group" style={{ marginBottom: 24 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', color: 'var(--accent-red)', marginBottom: 0 }}>Desconto</label>
+                        <div style={{ display: 'flex', background: 'var(--bg-hover)', borderRadius: 20, padding: 2 }}>
+                           <button 
+                             className={`btn btn-xs ${tipoDesconto === 'VALOR' ? 'btn-primary' : ''}`} 
+                             onClick={() => setTipoDesconto('VALOR')}
+                             style={{ borderRadius: 18, padding: '2px 8px', height: 24, fontSize: '0.65rem', border: 'none' }}
+                           >R$</button>
+                           <button 
+                             className={`btn btn-xs ${tipoDesconto === 'PERCENTUAL' ? 'btn-primary' : ''}`} 
+                             onClick={() => setTipoDesconto('PERCENTUAL')}
+                             style={{ borderRadius: 18, padding: '2px 8px', height: 24, fontSize: '0.65rem', border: 'none' }}
+                           >%</button>
+                        </div>
+                      </div>
+                      <input 
+                        className="input"
+                        type="number"
+                        step="0.01"
+                        placeholder={tipoDesconto === 'VALOR' ? '0,00' : '0%'}
+                        style={{ height: 50, fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-red)' }}
+                        value={desconto || ''}
+                        onChange={e => setDesconto(parseFloat(e.target.value) || 0)}
+                      />
+                   </div>
+
+                   <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Forma de Pagamento</label>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                          {FORMAS_PAGAMENTO.map(f => (
@@ -879,10 +971,20 @@ export default function PDV() {
 
                 {/* Coluna Direita: Resumo */}
                 <div className="pdv-payment-summary">
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div className="kpi-label">TOTAL</div>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>R$ {total.toFixed(2)}</div>
-                   </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.9rem' }}>
+                       <span style={{ color: 'var(--text-muted)' }}>Subtotal:</span>
+                       <span style={{ fontWeight: 600 }}>R$ {total.toFixed(2)}</span>
+                    </div>
+                    {valorDescontoReal > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.9rem', color: 'var(--accent-red)' }}>
+                        <span>Desconto {tipoDesconto === 'PERCENTUAL' ? `(${desconto}%)` : ''}:</span>
+                        <span>- R$ {valorDescontoReal.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                       <span style={{ fontWeight: 800 }}>TOTAL LÍQUIDO:</span>
+                       <span style={{ fontWeight: 900, color: 'var(--accent-green)', fontSize: '1.5rem' }}>R$ {totalLiquido.toFixed(2)}</span>
+                    </div>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div className="kpi-label">RECEBIDO</div>
                       <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-green)' }}>R$ {totalJaPago.toFixed(2)}</div>
@@ -918,13 +1020,13 @@ export default function PDV() {
                     return;
                   }
                   finalizarVendaMutation.mutate(true);
-                }} disabled={totalJaPago < total || finalizarVendaMutation.isPending}>
+                }} disabled={totalJaPago < totalLiquido - 0.05 || finalizarVendaMutation.isPending}>
                   <FileText size={18} />
                   Fiscal + Fechar
                </button>
                <button className="btn btn-primary" style={{ flex: 2, height: 50, fontSize: '1rem', fontWeight: 800, background: 'var(--accent-green)' }} 
                  onClick={() => finalizarVendaMutation.mutate(false)} 
-                 disabled={totalJaPago < total || finalizarVendaMutation.isPending}
+                 disabled={totalJaPago < totalLiquido - 0.05 || finalizarVendaMutation.isPending}
                >
                   <CheckCircle2 size={20} />
                   CONCLUIR VENDA
@@ -1007,8 +1109,8 @@ export default function PDV() {
       )}
 
       {showPrintModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: 400, textAlign: 'center' }}>
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content animate-in" style={{ maxWidth: 650, width: '90%', textAlign: 'center', padding: 48 }}>
              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
                <div style={{ padding: 16, background: 'rgba(59, 130, 246, 0.1)', borderRadius: '50%', color: 'var(--accent)' }}>
                   <FileText size={32} />
@@ -1025,10 +1127,46 @@ export default function PDV() {
                }}>
                  Não Imprimir
                </button>
-               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePrintReceipt}>
-                 Sim, Imprimir
-               </button>
+                <button className="btn btn-ghost" style={{ flex: 1, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }} onClick={handleWhatsAppReceipt}>
+                  <Smartphone size={18} />
+                  WhatsApp
+                </button>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePrintReceipt}>
+                  <FileText size={18} />
+                  Imprimir
+                </button>
              </div>
+          </div>
+        </div>
+      )}
+      {showWhatsappModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}>
+          <div className="card animate-in" style={{ maxWidth: 550, width: '90%', padding: 40, textAlign: 'center' }}>
+            <div style={{ padding: 16, background: 'rgba(34, 197, 94, 0.1)', borderRadius: '50%', color: 'var(--accent-green)', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Smartphone size={32} />
+            </div>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 8 }}>Enviar WhatsApp</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Informe o número do cliente (com DDD).</p>
+            
+            <div className="form-group" style={{ marginBottom: 24 }}>
+                <input 
+                  className="input" 
+                  type="text" 
+                  autoFocus 
+                  value={clienteTelefone}
+                  onChange={e => setClienteTelefone(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendWhatsapp()}
+                  style={{ textAlign: 'center', fontSize: '1.5rem', height: 60, fontWeight: 700 }}
+                  placeholder="(00) 00000-0000"
+                />
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12 }}>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowWhatsappModal(false)}>Cancelar</button>
+                <button className="btn btn-primary" style={{ flex: 1, background: 'var(--accent-green)' }} onClick={handleSendWhatsapp}>
+                    Enviar Agora
+                </button>
+            </div>
           </div>
         </div>
       )}

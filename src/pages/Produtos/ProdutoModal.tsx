@@ -23,6 +23,8 @@ interface Produto {
   origem: string;
   cfop_padrao: string;
   ativo: boolean;
+  estoque_inicial?: number | string;
+  estoque_atual?: number | string;
 }
 
 interface ProdutoModalProps {
@@ -46,12 +48,14 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
     cest: '',
     origem: '0',
     cfop_padrao: '',
-    ativo: true
+    ativo: true,
+    estoque_inicial: 0
   });
   
   const [loading, setLoading] = useState(false);
   const [showAddGrupo, setShowAddGrupo] = useState(false);
   const [novoGrupo, setNovoGrupo] = useState('');
+  const [margem, setMargem] = useState<number | string>('');
 
   // Fetch Categorias/Grupos
   const { data: grupos = [] } = useQuery<Grupo[]>({
@@ -98,6 +102,16 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
       ...prev,
       [name]: value
     }));
+
+    // Recalcular preço de venda se alterar custo
+    if (name === 'preco_compra') {
+       const custo = Number(value);
+       const m = Number(margem);
+       if (custo > 0 && m > 0) {
+         const venda = custo * (1 + m / 100);
+         setFormData(prev => ({ ...prev, preco_venda: venda.toFixed(2) }));
+       }
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -181,7 +195,39 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
               <input name="codigo_barras" value={formData.codigo_barras} onChange={handleChange} className="input" placeholder="7890000000000" />
             </div>
 
-            <div style={{ gridColumn: 'span 6' }}>
+            <div style={{ gridColumn: 'span 3' }}>
+              <label className="form-label">Preço de Compra (R$)</label>
+              <div style={{ position: 'relative' }}>
+                <DollarSign size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                <input name="preco_compra" type="number" step="0.01" value={formData.preco_compra} onChange={handleChange} className="input" style={{ paddingLeft: 36 }} />
+              </div>
+            </div>
+
+            <div style={{ gridColumn: 'span 3' }}>
+              <label className="form-label">Margem (%)</label>
+              <div style={{ position: 'relative' }}>
+                <Tag size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                <input 
+                  name="margem" 
+                  type="number" 
+                  value={margem} 
+                  onChange={(e) => {
+                    setMargem(e.target.value);
+                    const m = Number(e.target.value);
+                    const custo = Number(formData.preco_compra);
+                    if (custo > 0 && m > 0) {
+                      const venda = custo * (1 + m / 100);
+                      setFormData(prev => ({ ...prev, preco_venda: venda.toFixed(2) }));
+                    }
+                  }} 
+                  className="input" 
+                  style={{ paddingLeft: 36 }} 
+                  placeholder="Ex: 30"
+                />
+              </div>
+            </div>
+
+            <div style={{ gridColumn: 'span 3' }}>
               <label className="form-label">Preço de Venda (R$)</label>
               <div style={{ position: 'relative' }}>
                 <DollarSign size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
@@ -189,11 +235,21 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
               </div>
             </div>
 
-            <div style={{ gridColumn: 'span 6' }}>
-              <label className="form-label">Preço de Compra (R$)</label>
+            <div style={{ gridColumn: 'span 3' }}>
+              <label className="form-label">{produto ? 'Estoque Atual' : 'Estoque Inicial'}</label>
               <div style={{ position: 'relative' }}>
-                <DollarSign size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
-                <input name="preco_compra" type="number" step="0.01" value={formData.preco_compra} onChange={handleChange} className="input" style={{ paddingLeft: 36 }} />
+                <Package size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                <input 
+                  name={produto ? 'estoque_atual' : 'estoque_inicial'} 
+                  type="number" 
+                  step="0.001"
+                  value={produto ? formData.estoque_atual : formData.estoque_inicial} 
+                  onChange={handleChange} 
+                  className="input" 
+                  style={{ paddingLeft: 36, background: produto ? 'var(--bg-hover)' : 'white' }} 
+                  disabled={!!produto}
+                  placeholder="0,000"
+                />
               </div>
             </div>
 

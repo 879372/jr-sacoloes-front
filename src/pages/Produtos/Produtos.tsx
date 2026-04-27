@@ -139,7 +139,7 @@ export default function Produtos() {
                 <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Nenhum produto encontrado.</td></tr>
               ) : (
                 data?.results.map((p) => (
-                  <tr key={p.id}>
+                  <tr key={p.id} onClick={() => handleEdit(p)} style={{ cursor: 'pointer' }}>
                     <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.codigo_legado || '—'}</td>
                     <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p.nome}</td>
                     <td>{p.grupo || '—'}</td>
