@@ -234,9 +234,8 @@ export default function PDV() {
         preco_unitario: preco,
         subtotal: preco * qty
       });
-      // Atualizar total da venda
-      const novoTotal = total + (preco * qty);
-      await api.patch(`/vendas/${vendaId}/`, { total: novoTotal });
+      // O total da venda agora é recalculado automaticamente pelo servidor 
+      // ao criar/alterar itens. Não precisamos mais do PATCH manual aqui.
       return item;
     },
   });
@@ -530,8 +529,7 @@ export default function PDV() {
         return item;
       }));
 
-      // Atualiza os itens no servidor (opcional, mas bom para consistência)
-      // Se o usuário mudou o preço no cadastro, geralmente queremos que o item no carrinho reflita isso
+      // Atualiza os itens no servidor
       const itensToUpdate = carrinho.filter(i => i.produto_id === updatedProd.id);
       for (const item of itensToUpdate) {
         if (item.id) {
@@ -558,8 +556,9 @@ export default function PDV() {
     // Remove localmente imediatamente para UX fluida
     setCarrinho(prev => prev.filter((_, i) => i !== idx));
     if (venda) {
-      const novoTotal = Math.max(0, Number(venda.total) - item.subtotal);
-      setVenda(prev => prev ? { ...prev, total: novoTotal } : prev);
+      // O total será recalculado automaticamente no servidor
+      // Apenas atualizamos o estado local para refletir na UI
+      setVenda(prev => prev ? { ...prev } : prev);
     }
   };
 
