@@ -710,10 +710,6 @@ export default function PDV() {
             </button>
           </div>
 
-          <button className="btn btn-ghost btn-sm" style={{ padding: '6px', color: 'var(--accent)' }} onClick={handleConnectPrinter} title="Conectar Impressora USB">
-             <Printer size={16} />
-          </button>
-
           <button className="btn btn-ghost btn-sm" style={{ padding: '6px' }} onClick={() => navigate('/dashboard')}>
              <LogOut size={16} />
           </button>
@@ -1188,9 +1184,16 @@ export default function PDV() {
                </div>
              </div>
              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 12 }}>Venda Concluída!</h3>
-             <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem' }}>
+             <p style={{ color: 'var(--text-secondary)', marginBottom: 12, fontSize: '0.9rem' }}>
                Deseja imprimir o comprovante não-fiscal desta venda?
              </p>
+             <button 
+                onClick={handleConnectPrinter}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.85rem', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto 24px' }}
+              >
+                <Printer size={14} />
+                Configurar Impressora USB
+              </button>
              <div style={{ display: 'flex', gap: 10 }}>
                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => {
                  setShowPrintModal(false);
