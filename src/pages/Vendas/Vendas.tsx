@@ -10,8 +10,11 @@ import {
   Clock,
   User,
   X,
-  ShoppingCart
+  ShoppingCart,
+  Smartphone,
+  Printer
 } from 'lucide-react';
+import { thermalPrinter } from '../../lib/thermalPrint';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -41,6 +44,9 @@ interface Venda {
   total: number;
   status: 'EM_ABERTO' | 'FINALIZADA' | 'CANCELADA';
   nf_emitida: boolean;
+  nf_url_pdf?: string;
+  id_externo?: string;
+  desconto?: number;
   itens: VendaItem[];
   pagamentos: VendaPagamento[];
 }
@@ -60,6 +66,8 @@ export default function Vendas() {
     end: new Date().toISOString().split('T')[0] 
   });
   const [selectedVenda, setSelectedVenda] = useState<Venda | null>(null);
+  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
+  const [clienteTelefone, setClienteTelefone] = useState('');
 
   const { data: vendas, isLoading } = useQuery<Venda[]>({
     queryKey: ['vendas', searchTerm, statusFilter, dateRange],
@@ -108,6 +116,78 @@ export default function Vendas() {
       toast.error(msg);
     }
   });
+
+  const handlePrintUSB = async (venda: Venda) => {
+    try {
+      let cupom = `     JR SACOLOES\n`;
+      cupom += `   Comprovante de Venda\n`;
+      cupom += `--------------------------------\n`;
+      cupom += `Data: ${new Date(venda.data).toLocaleString('pt-BR')}\n`;
+      cupom += `Venda: #${venda.id}\n`;
+      cupom += `--------------------------------\n`;
+      
+      venda.itens.forEach((item) => {
+        const nome = (item.produto?.nome || item.produto_nome || 'Item').substring(0, 18).padEnd(18, ' ');
+        const totalItem = (item.subtotal || 0).toFixed(2).padStart(8, ' ');
+        cupom += `${nome} ${totalItem}\n`;
+        cupom += `  ${item.quantidade.toFixed(3)} x ${item.preco_unitario.toFixed(2)}\n`;
+      });
+      
+      cupom += `--------------------------------\n`;
+      cupom += `SUBTOTAL:       R$ ${Number(venda.total || 0).toFixed(2).padStart(10, ' ')}\n`;
+      if ((venda.desconto || 0) > 0) {
+        cupom += `DESCONTO:     - R$ ${Number(venda.desconto).toFixed(2).padStart(10, ' ')}\n`;
+      }
+      const totalLiq = Number(venda.total || 0) - Number(venda.desconto || 0);
+      cupom += `TOTAL:          R$ ${totalLiq.toFixed(2).padStart(10, ' ')}\n`;
+      cupom += `--------------------------------\n`;
+      cupom += `       OBRIGADO! \n`;
+
+      await thermalPrinter.print(cupom);
+      toast.success('Imprimindo via USB...');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao imprimir. Verifique a impressora USB.');
+    }
+  };
+
+  const handleSendWhatsapp = () => {
+    if (!selectedVenda) return;
+
+    const publicUrl = import.meta.env.VITE_PUBLIC_URL;
+    const apiBase = publicUrl || (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
+    const idExterno = selectedVenda.id_externo;
+
+    if (!selectedVenda.nf_url_pdf && !idExterno) {
+        toast.error('Não foi possível gerar o link do comprovante.');
+        return;
+    }
+
+    const linkComprovante = selectedVenda.nf_url_pdf || `${apiBase}/api/comprovante/${idExterno}/`;
+    const descontoMsg = (selectedVenda.desconto || 0) > 0 ? `Desconto: R$ ${Number(selectedVenda.desconto).toFixed(2)}\n` : '';
+
+    const texto = `*JR SACOLÕES - Seu Comprovante*\n\n` +
+      `Olá! Segue o link do seu comprovante de compra:\n\n` +
+      `${linkComprovante}\n\n` +
+      descontoMsg +
+      `Obrigado pela preferência!`;
+
+    const encodedText = encodeURIComponent(texto);
+    const fone = clienteTelefone.replace(/\D/g, '');
+    
+    window.open(`https://wa.me/${fone ? '55' + fone : ''}?text=${encodedText}`, '_blank');
+    setShowWhatsappModal(false);
+    setClienteTelefone('');
+  };
+
+  const handleConnectPrinter = async () => {
+    try {
+      await thermalPrinter.requestDevice();
+      toast.success('Impressora USB Conectada!');
+    } catch (e) {
+      toast.error('Falha ao conectar impressora.');
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -246,7 +326,7 @@ export default function Vendas() {
       {/* MODAL DE DETALHES */}
       {selectedVenda && (
         <div className="modal-overlay" onClick={() => setSelectedVenda(null)}>
-          <div className="card animate-in" style={{ width: '100%', maxWidth: 700, padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+          <div className="card animate-in" style={{ width: '100%', maxWidth: 1000, padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
               <div style={{ flex: 1 }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>Venda #{selectedVenda?.id ? String(selectedVenda.id).slice(-6).toUpperCase() : '---'}</h2>
@@ -262,7 +342,7 @@ export default function Vendas() {
             <div style={{ padding: '32px', maxHeight: '70vh', overflowY: 'auto' }}>
                <div style={{ marginBottom: 32 }}>
                   <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 }}>Itens da Venda</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                      {selectedVenda.itens?.map((item, idx) => (
                        <div key={`item-${item.id}-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid var(--border)' }}>
                           <div>
@@ -297,18 +377,35 @@ export default function Vendas() {
                </div>
             </div>
 
-            <div style={{ padding: '24px 32px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12, background: 'rgba(255,255,255,0.01)' }}>
-               {selectedVenda.status === 'EM_ABERTO' && (
-                 <button 
-                  className="btn btn-primary"
-                  onClick={() => navigate(`/pdv?venda_id=${selectedVenda.id}`)}
-                 >
-                   <ShoppingCart size={16} />
-                   Continuar no PDV
-                 </button>
-               )}
-               {selectedVenda.status === 'FINALIZADA' && (
-                 <>
+            <div style={{ padding: '24px 32px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}>
+               <button 
+                  onClick={handleConnectPrinter} 
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <Printer size={12} />
+                  Configurar Impressora
+                </button>
+               
+               <div style={{ display: 'flex', gap: 12 }}>
+                {selectedVenda.status === 'FINALIZADA' && (
+                  <>
+                    <button 
+                      className="btn btn-ghost" 
+                      style={{ color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
+                      onClick={() => setShowWhatsappModal(true)}
+                    >
+                      <Smartphone size={16} />
+                      WhatsApp
+                    </button>
+                    <button 
+                      className="btn btn-ghost" 
+                      style={{ color: 'var(--accent-green)', background: 'rgba(16, 185, 129, 0.1)' }}
+                      onClick={() => handlePrintUSB(selectedVenda)}
+                    >
+                      <Printer size={16} />
+                      Reimprimir (USB)
+                    </button>
+                    
                     <button 
                       className="btn btn-danger" 
                       onClick={() => {
@@ -331,21 +428,63 @@ export default function Vendas() {
                       }}
                       disabled={cancelarMutation.isPending}
                     >
-                     <Trash2 size={16} />
-                     Cancelar Venda
-                   </button>
-                   {!selectedVenda.nf_emitida && (
-                     <button 
-                       className="btn btn-primary"
-                       onClick={() => emitirNFCeMutation.mutate(selectedVenda.id)}
-                       disabled={emitirNFCeMutation.isPending}
-                     >
-                       <FileText size={16} />
-                       Emitir NFC-e
-                     </button>
-                   )}
-                 </>
-               )}
+                      <Trash2 size={16} />
+                      Cancelar Venda
+                    </button>
+                    
+                    {!selectedVenda.nf_emitida && (
+                      <button 
+                        className="btn btn-primary"
+                        onClick={() => emitirNFCeMutation.mutate(selectedVenda.id)}
+                        disabled={emitirNFCeMutation.isPending}
+                      >
+                        <FileText size={16} />
+                        Emitir NFC-e
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {selectedVenda.status === 'EM_ABERTO' && (
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => navigate(`/pdv?venda_id=${selectedVenda.id}`)}
+                  >
+                    <ShoppingCart size={16} />
+                    Continuar no PDV
+                  </button>
+                )}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWhatsappModal && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }}>
+          <div className="card animate-in" style={{ maxWidth: 450, width: '90%', padding: 32, textAlign: 'center' }}>
+            <div style={{ padding: 12, background: 'rgba(34, 197, 94, 0.1)', borderRadius: '50%', color: 'var(--accent-green)', width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Smartphone size={28} />
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: 8 }}>Reenviar WhatsApp</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: '0.9rem' }}>Informe o número do cliente.</p>
+            
+            <input 
+              className="input" 
+              type="text" 
+              autoFocus 
+              value={clienteTelefone}
+              onChange={e => setClienteTelefone(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSendWhatsapp()}
+              style={{ textAlign: 'center', fontSize: '1.25rem', height: 50, fontWeight: 700, marginBottom: 20 }}
+              placeholder="(00) 00000-0000"
+            />
+            
+            <div style={{ display: 'flex', gap: 12 }}>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowWhatsappModal(false)}>Cancelar</button>
+                <button className="btn btn-primary" style={{ flex: 1, background: 'var(--accent-green)' }} onClick={handleSendWhatsapp}>
+                    Enviar Agora
+                </button>
             </div>
           </div>
         </div>

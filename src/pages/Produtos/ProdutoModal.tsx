@@ -85,6 +85,7 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
         codigo_barras: produto.codigo_barras || '',
         preco_compra: produto.preco_compra ?? '',
         preco_venda: produto.preco_venda ?? '',
+        estoque_inicial: produto.estoque_atual ?? 0,
       });
     }
   }, [produto]);
@@ -236,18 +237,17 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
             </div>
 
             <div style={{ gridColumn: 'span 3' }}>
-              <label className="form-label">{produto ? 'Estoque Atual' : 'Estoque Inicial'}</label>
+              <label className="form-label">Estoque {produto ? 'Atual' : 'Inicial'}</label>
               <div style={{ position: 'relative' }}>
                 <Package size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
                 <input 
-                  name={produto ? 'estoque_atual' : 'estoque_inicial'} 
+                  name="estoque_inicial" 
                   type="number" 
                   step="0.001"
-                  value={produto ? formData.estoque_atual : formData.estoque_inicial} 
+                  value={formData.estoque_inicial} 
                   onChange={handleChange} 
                   className="input" 
-                  style={{ paddingLeft: 36, background: produto ? 'var(--bg-hover)' : 'white' }} 
-                  disabled={!!produto}
+                  style={{ paddingLeft: 36 }} 
                   placeholder="0,000"
                 />
               </div>
