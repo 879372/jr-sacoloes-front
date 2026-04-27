@@ -79,6 +79,14 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
 
   useEffect(() => {
     if (produto) {
+      const precoCompra = Number(produto.preco_compra) || 0;
+      const precoVenda = Number(produto.preco_venda) || 0;
+      let margemInicial = '';
+      
+      if (precoCompra > 0) {
+        margemInicial = (((precoVenda / precoCompra) - 1) * 100).toFixed(2);
+      }
+
       setFormData({
         ...produto,
         codigo_legado: produto.codigo_legado || '',
@@ -87,6 +95,7 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
         preco_venda: produto.preco_venda ?? '',
         estoque_inicial: produto.estoque_atual ?? 0,
       });
+      setMargem(margemInicial);
     }
   }, [produto]);
 
@@ -113,6 +122,16 @@ export default function ProdutoModal({ produto, onClose, onSuccess }: ProdutoMod
          setFormData(prev => ({ ...prev, preco_venda: venda.toFixed(2) }));
        }
     }
+
+    // Recalcular margem se alterar preço de venda
+    if (name === 'preco_venda') {
+      const venda = Number(value);
+      const custo = Number(formData.preco_compra);
+      if (custo > 0 && venda > 0) {
+        const m = ((venda / custo) - 1) * 100;
+        setMargem(m.toFixed(2));
+      }
+   }
   };
 
   const handleSubmit = async (e: FormEvent) => {
