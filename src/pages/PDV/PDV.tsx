@@ -449,7 +449,7 @@ export default function PDV() {
       cupom += `--------------------------------\n`;
       
       printData.carrinho.forEach((item: any) => {
-        const nome = (item.produto?.nome || 'Item').substring(0, 18).padEnd(18, ' ');
+        const nome = (item.nome || 'Item').substring(0, 18).padEnd(18, ' ');
         const totalItem = (item.subtotal || 0).toFixed(2).padStart(8, ' ');
         cupom += `${nome} ${totalItem}\n`;
         cupom += `  ${item.quantidade.toFixed(3)} x ${item.preco_unitario.toFixed(2)}\n`;
@@ -463,9 +463,23 @@ export default function PDV() {
       const totalLiq = Number(printData.total || 0) - Number(printData.desconto || 0);
       cupom += `TOTAL:          R$ ${totalLiq.toFixed(2).padStart(10, ' ')}\n`;
       cupom += `--------------------------------\n`;
+
+      // Informações Fiscais
+      if (printData.nf_status === 'AUTORIZADA') {
+        cupom += `NFC-e: ${printData.nf_numero} Serie: ${printData.nf_serie}\n`;
+        cupom += `Chave de Acesso:\n`;
+        cupom += `${printData.nf_chave?.match(/.{1,4}/g)?.join(' ') || ''}\n`;
+        cupom += `--------------------------------\n`;
+      }
+
       cupom += `       OBRIGADO! \n`;
 
-      await thermalPrinter.print(cupom);
+      if (printData.nf_url_consulta) {
+        await thermalPrinter.printWithQRCode(cupom, printData.nf_url_consulta);
+      } else {
+        await thermalPrinter.print(cupom);
+      }
+      
       toast.success('Imprimindo via USB...');
     } catch (error) {
       console.error(error);

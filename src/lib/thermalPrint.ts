@@ -57,16 +57,62 @@ export class ThermalPrinter {
 
     const cleanText = text
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove acentos (algumas térmicas não aceitam UTF-8)
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
       .replace(/[^\x00-\x7F]/g, '');
 
     const data = encoder.encode(INIT + cleanText + FEED + CUT);
+    await this.sendData(data);
+  }
+
+  /**
+   * Imprime texto seguido de um QR Code (útil para NFC-e)
+   */
+  async printWithQRCode(text: string, qrCodeData: string) {
+    if (!this.device) await this.requestDevice();
+    if (!this.device) throw new Error('Impressora não conectada');
+
+    const encoder = new TextEncoder();
     
-    // Envia para o endpoint 1 (padrão da maioria das impressoras térmicas)
+    // Comandos Iniciais
+    const INIT = '\x1B\x40';
+    const CENTER = '\x1B\x61\x01';
+    const FEED = '\n\n';
+    const CUT = '\x1D\x56\x00';
+
+    const cleanText = text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x00-\x7F]/g, '');
+
+    // Comandos QR Code (Padrão ESC/POS)
+    const storeLen = qrCodeData.length + 3;
+    const storeL = storeLen & 0xFF;
+    const storeH = (storeLen >> 8) & 0xFF;
+
+    const qrCommands = [
+      '\x1B\x61\x01', // Centralizar
+      '\x1D\x28\x6B\x04\x00\x31\x41\x32\x00', // Modelo 2
+      '\x1D\x28\x6B\x03\x00\x31\x43\x08',     // Tamanho do módulo (8)
+      '\x1D\x28\x6B\x03\x00\x31\x45\x30',     // Correção de erro L
+      `\x1D\x28\x6B${String.fromCharCode(storeL)}${String.fromCharCode(storeH)}\x31\x50\x30${qrCodeData}`, // Armazenar dados
+      '\x1D\x28\x6B\x03\x00\x31\x51\x30',     // Imprimir QR Code
+    ].join('');
+
+    const mainData = encoder.encode(INIT + cleanText + FEED);
+    const qrData = encoder.encode(qrCommands + '\n\n\n' + CUT);
+    
+    const combinedData = new Uint8Array(mainData.length + qrData.length);
+    combinedData.set(mainData);
+    combinedData.set(qrData, mainData.length);
+
+    await this.sendData(combinedData);
+  }
+
+  private async sendData(data: Uint8Array) {
+    if (!this.device) return;
     try {
         await this.device.transferOut(1, data);
     } catch (e) {
-        // Algumas impressoras usam o endpoint 2 ou 3
         try {
             await this.device.transferOut(2, data);
         } catch (e2) {

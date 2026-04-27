@@ -141,9 +141,26 @@ export default function Vendas() {
       const totalLiq = Number(venda.total || 0) - Number(venda.desconto || 0);
       cupom += `TOTAL:          R$ ${totalLiq.toFixed(2).padStart(10, ' ')}\n`;
       cupom += `--------------------------------\n`;
+      
+      if (venda.nf_emitida) {
+          cupom += `NFC-e: ${venda.id} Serie: 1\n`; // Ajustar se tiver campos específicos
+          cupom += `Chave de Acesso:\n`;
+          cupom += `Consulte no site da SEFAZ\n`;
+          cupom += `--------------------------------\n`;
+      }
+
       cupom += `       OBRIGADO! \n`;
 
-      await thermalPrinter.print(cupom);
+      if (venda.nf_url_pdf || venda.id_externo) {
+          // Tenta reconstruir a URL de consulta se for fiscal
+          const publicUrl = import.meta.env.VITE_PUBLIC_URL;
+          const apiBase = publicUrl || (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
+          const qrUrl = venda.nf_url_pdf || `${apiBase}/api/comprovante/${venda.id_externo}/`;
+          await thermalPrinter.printWithQRCode(cupom, qrUrl);
+      } else {
+          await thermalPrinter.print(cupom);
+      }
+      
       toast.success('Imprimindo via USB...');
     } catch (error) {
       console.error(error);
