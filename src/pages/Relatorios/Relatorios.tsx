@@ -49,6 +49,22 @@ export default function Relatorios() {
   const [vendaParaCancelar, setVendaParaCancelar] = useState<Venda | null>(null);
   const queryClient = useQueryClient();
 
+  // Filtros de Data
+  const now = new Date();
+  const currentMonthStr = now.toISOString().slice(0, 7); // YYYY-MM
+  const [mesInicio, setMesInicio] = useState(currentMonthStr);
+  const [mesFim, setMesFim] = useState(currentMonthStr);
+
+  const getStartEndDate = () => {
+    const start = `${mesInicio}-01`;
+    const [year, month] = mesFim.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const end = `${mesFim}-${String(lastDay).padStart(2, '0')}`;
+    return { start, end };
+  };
+
+  const { start, end } = getStartEndDate();
+
   const cancelarVendaMutation = useMutation({
     mutationFn: ({ id, justificativa }: { id: number; justificativa?: string }) =>
       api.post(`/vendas/${id}/cancelar/`, justificativa ? { justificativa } : {}),
@@ -65,25 +81,25 @@ export default function Relatorios() {
   });
   
   const { data: vendas = [], isLoading } = useQuery<Venda[]>({
-    queryKey: ['relatorios-vendas'],
+    queryKey: ['relatorios-vendas', start, end],
     queryFn: async () => {
-      const resp = await api.get('/vendas/', { params: { status: 'FINALIZADA' } });
+      const resp = await api.get('/vendas/', { params: { status: 'FINALIZADA', data_inicio: start, data_fim: end } });
       return resp.data.results || resp.data;
     },
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['relatorios-stats'],
+    queryKey: ['relatorios-stats', start, end],
     queryFn: async () => {
-      const resp = await api.get('dashboard-stats/');
+      const resp = await api.get('dashboard-stats/', { params: { data_inicio: start, data_fim: end } });
       return resp.data;
     }
   });
 
   const { data: sessoes = [], isLoading: loadingSessoes } = useQuery<Sessao[]>({
-    queryKey: ['relatorios-sessoes'],
+    queryKey: ['relatorios-sessoes', start, end],
     queryFn: async () => {
-      const resp = await api.get('/sessoes-caixa/');
+      const resp = await api.get('/sessoes-caixa/', { params: { data_inicio: start, data_fim: end } });
       return resp.data.results || resp.data;
     },
     enabled: tab === 'caixa'
@@ -103,14 +119,37 @@ export default function Relatorios() {
 
   return (
     <div className="animate-in">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
         <div>
           <h1 className="page-title">Relatórios & BI</h1>
-          <p className="page-subtitle">Análise de lucratividade por categoria</p>
+          <p className="page-subtitle">Análise de performance e resultados</p>
         </div>
-        <div className="tabs" style={{ display: 'flex', background: 'var(--bg-card)', padding: 4, borderRadius: 10, border: '1px solid var(--border)' }}>
-             <button className={`btn btn-sm ${tab === 'vendas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('vendas')}>Vendas</button>
-             <button className={`btn btn-sm ${tab === 'caixa' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('caixa')}>Sessões de Caixa</button>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-card)', padding: '8px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>DE:</span>
+            <input 
+              type="month" 
+              className="input" 
+              style={{ width: 150, height: 38, fontSize: '0.85rem' }} 
+              value={mesInicio}
+              onChange={e => setMesInicio(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>ATÉ:</span>
+            <input 
+              type="month" 
+              className="input" 
+              style={{ width: 150, height: 38, fontSize: '0.85rem' }} 
+              value={mesFim}
+              onChange={e => setMesFim(e.target.value)}
+            />
+          </div>
+          <div className="tabs" style={{ display: 'flex', background: 'var(--bg-body)', padding: 4, borderRadius: 8, border: '1px solid var(--border)', marginLeft: 8 }}>
+              <button className={`btn btn-sm ${tab === 'vendas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('vendas')}>Vendas</button>
+              <button className={`btn btn-sm ${tab === 'caixa' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('caixa')}>Caixa</button>
+          </div>
         </div>
       </div>
 
