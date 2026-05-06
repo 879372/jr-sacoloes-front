@@ -365,6 +365,16 @@ body {
   color: var(--text-muted);
 }
 
+.input::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.6);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 .form-group {
   margin-bottom: 14px;
 }

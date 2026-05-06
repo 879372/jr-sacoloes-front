@@ -151,6 +151,16 @@ export default function Relatorios() {
               <button className={`btn btn-sm ${tab === 'caixa' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('caixa')}>Caixa</button>
           </div>
         </div>
+
+        <style>{`
+          input[type="month"]::-webkit-calendar-picker-indicator {
+            filter: invert(1) opacity(0.6);
+            cursor: pointer;
+          }
+          input[type="month"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+          }
+        `}</style>
       </div>
 
       <div className="kpi-grid" style={{ marginBottom: 28 }}>
