@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
+import { toast } from 'sonner';
 import ClienteModal from './ClienteModal';
+import ConfirmModal from '../../components/ConfirmModal';
 import { 
   Plus, 
   Search, 
@@ -45,6 +47,7 @@ export default function Clientes() {
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+  const [clienteParaToggle, setClienteParaToggle] = useState<Cliente | null>(null);
 
   // Fetch Clientes with React Query
   const { data, isLoading } = useQuery<ApiResponse>({
@@ -62,6 +65,8 @@ export default function Clientes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      setClienteParaToggle(null);
+      toast.success('Status do cliente atualizado!');
     },
   });
 
@@ -76,9 +81,7 @@ export default function Clientes() {
   };
 
   const handleToggle = (cliente: Cliente) => {
-    if (confirm(`Deseja realmente ${cliente.ativo ? 'desativar' : 'ativar'} o cliente ${cliente.nome}?`)) {
-      toggleMutation.mutate(cliente);
-    }
+    setClienteParaToggle(cliente);
   };
 
   return (
@@ -197,6 +200,17 @@ export default function Clientes() {
           onSuccess={() => queryClient.invalidateQueries({ queryKey: ['clientes'] })} 
         />
       )}
+
+      <ConfirmModal 
+        isOpen={!!clienteParaToggle}
+        title={clienteParaToggle?.ativo ? 'Desativar Cliente' : 'Ativar Cliente'}
+        description={`Deseja realmente ${clienteParaToggle?.ativo ? 'desativar' : 'ativar'} o cliente "${clienteParaToggle?.nome}"?`}
+        confirmLabel={clienteParaToggle?.ativo ? 'Desativar' : 'Ativar'}
+        onConfirm={() => clienteParaToggle && toggleMutation.mutate(clienteParaToggle)}
+        onClose={() => setClienteParaToggle(null)}
+        isLoading={toggleMutation.isPending}
+        isDanger={clienteParaToggle?.ativo}
+      />
     </div>
   );
 }

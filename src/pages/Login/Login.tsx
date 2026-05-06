@@ -23,7 +23,9 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{ fontSize: '3rem', marginBottom: 12 }}>📦</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <img src="/logo.png" alt="Logo JR Sacolões" style={{ width: 80, height: 80, borderRadius: '16px', objectFit: 'cover' }} />
+          </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-1px' }}>
             JR <span style={{ color: 'var(--accent)' }}>Sacolões</span>
           </h1>

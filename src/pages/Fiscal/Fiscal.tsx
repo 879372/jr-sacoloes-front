@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../../lib/api';
 import fiscalApi from '../../services/fiscalApi';
+import ConfirmModal from '../../components/ConfirmModal';
 import { 
   FileText, 
   Send, 
@@ -50,6 +51,7 @@ export default function Fiscal() {
   const [tipoEmissao, setTipoEmissao] = useState<'nfce' | 'nfe'>('nfce');
   const [filtroVenda, setFiltroVenda] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [notaParaCancelar, setNotaParaCancelar] = useState<any | null>(null);
 
   const { data: notas = [], isLoading, refetch: refetchNotas, isFetching } = useQuery<any[]>({
     queryKey: ['fiscal-docs', activeTab, periodo],
@@ -141,14 +143,7 @@ export default function Fiscal() {
 
 
   const handleEnviarEmail = async (n: any) => {
-    const email = prompt('Informe o e-mail do destinatário:');
-    if (!email) return;
-    try {
-      await fiscalApi.post(`/nfe/${n.chave_nfe}/enviar-email/`, { emails: [email] });
-      toast.success('Solicitação de e-mail enviada!');
-    } catch {
-      toast.error('Erro ao enviar e-mail.');
-    }
+    toast.error('Função de envio de e-mail requer um destinatário. Por favor, utilize o cadastro de clientes.');
   };
 
   return (
@@ -317,23 +312,7 @@ export default function Fiscal() {
                                className="btn btn-sm btn-ghost" 
                                style={{ color: 'var(--accent-red)' }} 
                                title="Cancelar Nota"
-                               onClick={async () => {
-                                 if (window.confirm(`Deseja cancelar esta ${n.tipo.toUpperCase()}? Esta ação é irreversível na SEFAZ.`)) {
-                                   try {
-                                     const justificativa = prompt(`Justificativa (mínimo 15 caracteres):`, 'Erro na emissão: itens incorretos');
-                                     if (!justificativa || justificativa.length < 15) {
-                                       toast.error('Justificativa inválida ou muito curta.');
-                                       return;
-                                     }
-                                     await api.post(`/vendas/${n.id}/cancelar/`, { justificativa });
-                                     toast.success('Solicitação de cancelamento enviada!');
-                                     refetchNotas();
-                                   } catch (err: any) {
-                                     const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar nota.';
-                                     toast.error(msg);
-                                   }
-                                 }
-                               }}
+                               onClick={() => setNotaParaCancelar(n)}
                              >
                                <X size={14} />
                              </button>
@@ -473,6 +452,27 @@ export default function Fiscal() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!notaParaCancelar}
+        title={`Cancelar ${notaParaCancelar?.tipo?.toUpperCase()}`}
+        description={`Deseja realmente cancelar esta nota? Esta ação é irreversível na SEFAZ.`}
+        confirmLabel="Confirmar Cancelamento"
+        onConfirm={async () => {
+          if (!notaParaCancelar) return;
+          try {
+            const justificativa = 'Erro na emissão: itens incorretos ou erro de digitação';
+            await api.post(`/vendas/${notaParaCancelar.id}/cancelar/`, { justificativa });
+            toast.success('Solicitação de cancelamento enviada!');
+            setNotaParaCancelar(null);
+            refetchNotas();
+          } catch (err: any) {
+            const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar nota.';
+            toast.error(msg);
+          }
+        }}
+        onClose={() => setNotaParaCancelar(null)}
+      />
     </div>
   );
 }

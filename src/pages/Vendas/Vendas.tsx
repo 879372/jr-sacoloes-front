@@ -17,6 +17,7 @@ import {
 import { thermalPrinter } from '../../lib/thermalPrint';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import ConfirmModal from '../../components/ConfirmModal';
 
 interface VendaItem {
   id: number;
@@ -68,6 +69,7 @@ export default function Vendas() {
   const [selectedVenda, setSelectedVenda] = useState<Venda | null>(null);
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [clienteTelefone, setClienteTelefone] = useState('');
+  const [vendaParaCancelar, setVendaParaCancelar] = useState<{ id: number, justificativa?: string } | null>(null);
 
   const { data: vendas, isLoading } = useQuery<Venda[]>({
     queryKey: ['vendas', searchTerm, statusFilter, dateRange],
@@ -91,6 +93,7 @@ export default function Vendas() {
       toast.success('Venda cancelada com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['vendas'] });
       setSelectedVenda(null);
+      setVendaParaCancelar(null);
     },
     onError: (err: any) => {
       const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || err.response?.data?.erro || 'Erro ao cancelar venda.';
@@ -428,19 +431,10 @@ export default function Vendas() {
                       onClick={() => {
                         let justificativa = '';
                         if (selectedVenda.nf_emitida) {
-                          justificativa = prompt(
-                            'Esta venda possui NFC-e emitida. Informe a justificativa de cancelamento (mínimo 15 caracteres):',
-                            'Venda cancelada por desistencia do cliente ou erro de digitacao'
-                          ) || '';
-                          
-                          if (!justificativa || justificativa.length < 15) {
-                            if (justificativa) toast.error('Justificativa muito curta (mínimo 15 caracteres).');
-                            return;
-                          }
-                        }
-
-                        if (confirm('Tem certeza que deseja cancelar esta venda? O estoque será devolvido.')) {
-                          cancelarMutation.mutate({ id: selectedVenda.id, justificativa });
+                          const justificativa = 'Venda cancelada por desistencia do cliente ou erro de digitacao';
+                          setVendaParaCancelar({ id: selectedVenda.id, justificativa });
+                        } else {
+                          setVendaParaCancelar({ id: selectedVenda.id });
                         }
                       }}
                       disabled={cancelarMutation.isPending}
@@ -506,6 +500,16 @@ export default function Vendas() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!vendaParaCancelar}
+        title="Cancelar Venda"
+        description={vendaParaCancelar?.justificativa ? "Esta venda possui NFC-e emitida. O cancelamento é irreversível e o estoque será devolvido." : "Tem certeza que deseja cancelar esta venda? O estoque será devolvido."}
+        confirmLabel="Cancelar Venda"
+        onConfirm={() => vendaParaCancelar && cancelarMutation.mutate(vendaParaCancelar)}
+        onClose={() => setVendaParaCancelar(null)}
+        isLoading={cancelarMutation.isPending}
+      />
 
       {/* CSS LOCAIS PARA O HISTÓRICO */}
       <style>{`

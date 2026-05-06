@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
+import { toast } from 'sonner';
 import FinanceiroColumn from './components/FinanceiroColumn';
 import ContaForm from './components/ContaForm';
+import ConfirmModal from '../../components/ConfirmModal';
 import { 
-  Plus, 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowRightLeft, 
+  TrendingUp,
+  TrendingDown,
   X,
   CreditCard,
   Wallet,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Search
 } from 'lucide-react';
 
 interface Conta {
@@ -24,19 +26,25 @@ interface Conta {
   cliente_nome?: string;
   data_pagamento?: string;
   data_recebimento?: string;
+  observacoes?: string;
+  tipo: 'PAGAR' | 'RECEBER';
 }
 
 export default function Financeiro() {
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState<'PAGAR' | 'RECEBER' | null>(null);
+  const [showModal, setShowModal] = useState<{ type: 'PAGAR' | 'RECEBER', editData?: Conta } | null>(null);
+  const [contaParaExcluir, setContaParaExcluir] = useState<Conta | null>(null);
   const [activeTab, setActiveTab] = useState<'vencidos' | 'pagar' | 'receber' | 'pagos' | 'recebidos'>('vencidos');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch Contas a Pagar
   const { data: pagar = [], isLoading: loadingPagar } = useQuery<Conta[]>({
     queryKey: ['contas-pagar'],
     queryFn: async () => {
       const resp = await api.get('/financeiro/contas-pagar/');
-      return resp.data.results || resp.data;
+      const data = resp.data.results || resp.data;
+      return data.map((c: any) => ({ ...c, tipo: 'PAGAR' }));
     },
   });
 
@@ -45,7 +53,8 @@ export default function Financeiro() {
     queryKey: ['contas-receber'],
     queryFn: async () => {
       const resp = await api.get('/financeiro/contas-receber/');
-      return resp.data.results || resp.data;
+      const data = resp.data.results || resp.data;
+      return data.map((c: any) => ({ ...c, tipo: 'RECEBER' }));
     },
   });
 
@@ -69,11 +78,54 @@ export default function Financeiro() {
     baixarMutation.mutate({ conta, tipo });
   };
 
-  const vencidos = [...pagar.filter(c => c.status === 'VENCIDO'), ...receber.filter(c => c.status === 'VENCIDO')];
-  const aPagar = pagar.filter(c => c.status === 'PENDENTE');
-  const aReceber = receber.filter(c => c.status === 'PENDENTE');
-  const pagos = pagar.filter(c => c.status === 'PAGO');
-  const recebidos = receber.filter(c => c.status === 'RECEBIDO');
+  // Mutation para excluir conta
+  const excluirMutation = useMutation({
+    mutationFn: async ({ conta, tipo }: { conta: Conta, tipo: 'PAGAR' | 'RECEBER' }) => {
+      const endpoint = tipo === 'PAGAR' ? `/financeiro/contas-pagar/${conta.id}/` : `/financeiro/contas-receber/${conta.id}/`;
+      return api.delete(endpoint);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contas-pagar'] });
+      queryClient.invalidateQueries({ queryKey: ['contas-receber'] });
+      toast.success('Lançamento excluído com sucesso');
+      setContaParaExcluir(null);
+    },
+  });
+
+  const handleDelete = (conta: Conta) => {
+    setContaParaExcluir(conta);
+  };
+
+  const handleEdit = (conta: Conta) => {
+    setShowModal({ type: conta.tipo, editData: conta });
+  };
+
+  // Filtragem por mês e pesquisa
+  const filterBySearch = (c: Conta) => {
+    const search = searchTerm.toLowerCase();
+    return (
+      c.descricao?.toLowerCase().includes(search) ||
+      c.fornecedor?.toLowerCase().includes(search) ||
+      c.cliente_nome?.toLowerCase().includes(search) ||
+      c.observacoes?.toLowerCase().includes(search)
+    );
+  };
+
+  const filteredPagar = pagar.filter(c => {
+    const date = c.status === 'PAGO' ? (c.data_pagamento || c.vencimento) : c.vencimento;
+    return date.startsWith(selectedMonth) && filterBySearch(c);
+  });
+  
+  const filteredReceber = receber.filter(c => {
+    const date = c.status === 'RECEBIDO' ? (c.data_recebimento || c.vencimento) : c.vencimento;
+    return date.startsWith(selectedMonth) && filterBySearch(c);
+  });
+
+  const vencidos = [...filteredPagar.filter(c => c.status === 'VENCIDO'), ...filteredReceber.filter(c => c.status === 'VENCIDO')];
+  const aPagar = filteredPagar.filter(c => c.status === 'PENDENTE');
+  const aReceber = filteredReceber.filter(c => c.status === 'PENDENTE');
+  const pagos = filteredPagar.filter(c => c.status === 'PAGO');
+  const recebidos = filteredReceber.filter(c => c.status === 'RECEBIDO');
 
   const totalVencido = vencidos.reduce((a, c) => a + parseFloat(c.valor), 0);
   const totalAPagar = aPagar.reduce((a, c) => a + parseFloat(c.valor), 0);
@@ -90,12 +142,31 @@ export default function Financeiro() {
           <h1 className="page-title">Gestão Financeira</h1>
           <p className="page-subtitle">Fluxo de Caixa e Controle de Contas</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost" onClick={() => setShowModal('RECEBER')}>
+        <div className="financeiro-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div className="search-box" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 10, border: '1px solid var(--border)', flex: 1, minWidth: 200 }}>
+            <Search size={16} style={{ color: 'var(--text-muted)', marginRight: 10 }} />
+            <input 
+              type="text" 
+              placeholder="Pesquisar por descrição, fornecedor..." 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%' }}
+            />
+          </div>
+          <div className="month-picker" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <Calendar size={16} style={{ color: 'var(--accent)', marginRight: 10 }} />
+            <input 
+              type="month" 
+              value={selectedMonth} 
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+            />
+          </div>
+          <button className="btn btn-ghost" onClick={() => setShowModal({ type: 'RECEBER' })}>
             <TrendingUp size={18} className="text-accent-green" />
             Lançar Recebimento
           </button>
-          <button className="btn btn-primary" onClick={() => setShowModal('PAGAR')}>
+          <button className="btn btn-primary" onClick={() => setShowModal({ type: 'PAGAR' })}>
             <TrendingDown size={18} />
             Lançar Pagamento
           </button>
@@ -141,14 +212,20 @@ export default function Financeiro() {
       <style>{`
         .financeiro-tabs { display: none; }
         @media (max-width: 1024px) {
+          .page-header { flex-direction: column; align-items: flex-start !important; gap: 20px !important; }
+          .financeiro-actions { flex-direction: column; width: 100%; gap: 12px !important; }
+          .search-box, .month-picker { width: 100%; justify-content: center; padding: 12px !important; }
+          .financeiro-actions .btn { width: 100%; justify-content: center; padding: 12px !important; }
+          
+          .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+          .kpi-card:last-child { grid-column: span 2; } /* O 5º card ocupa a largura toda ou fica sozinho */
+
           .financeiro-tabs { display: flex; background: var(--bg-secondary); border-radius: 12px; padding: 4px; margin-bottom: 24px; border: 1px solid var(--border); overflow-x: auto; }
-          .financeiro-tab { flex: none; min-width: 100px; padding: 12px 8px; border: none; background: none; color: var(--text-secondary); font-size: 0.75rem; font-weight: 700; cursor: pointer; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.2s; }
+          .financeiro-tab { flex: 1; min-width: 80px; padding: 12px 4px; border: none; background: none; color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; cursor: pointer; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.2s; }
           .financeiro-tab.active { background: var(--bg-card); color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+          .kanban-container { display: block !important; overflow-x: visible !important; }
         }
         .kanban-container { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 24px; min-height: 500px; }
-        @media (max-width: 1024px) {
-          .kanban-container { display: block; overflow-x: visible; }
-        }
       `}</style>
       
       <div className="financeiro-tabs">
@@ -182,7 +259,9 @@ export default function Financeiro() {
               cor="var(--accent-red)"
               isActiveMobile={activeTab === 'vencidos'}
               itens={vencidos}
-              onBaixar={c => handleBaixar(c, pagar.find(p => p.id === c.id) ? 'PAGAR' : 'RECEBER')} 
+              onBaixar={c => handleBaixar(c, c.tipo)} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
               
             <FinanceiroColumn 
@@ -192,6 +271,8 @@ export default function Financeiro() {
               isActiveMobile={activeTab === 'pagar'}
               itens={aPagar}
               onBaixar={c => handleBaixar(c, 'PAGAR')} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
               
             <FinanceiroColumn 
@@ -201,6 +282,8 @@ export default function Financeiro() {
               isActiveMobile={activeTab === 'receber'}
               itens={aReceber}
               onBaixar={c => handleBaixar(c, 'RECEBER')} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
               
             <FinanceiroColumn 
@@ -210,8 +293,10 @@ export default function Financeiro() {
               isActiveMobile={activeTab === 'pagos'}
               itens={pagos}
               onBaixar={() => {}} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
-
+              
             <FinanceiroColumn 
               titulo="Recebidos" 
               Icon={<Wallet size={18} />} 
@@ -219,6 +304,8 @@ export default function Financeiro() {
               isActiveMobile={activeTab === 'recebidos'}
               itens={recebidos}
               onBaixar={() => {}} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
           </>
         )}
@@ -230,21 +317,34 @@ export default function Financeiro() {
           <div className="card animate-in" style={{ width: '100%', maxWidth: 550, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ padding: 8, background: showModal === 'PAGAR' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', borderRadius: 8, color: showModal === 'PAGAR' ? 'var(--accent-red)' : 'var(--accent-green)' }}>
+                <div style={{ padding: 8, background: showModal.type === 'PAGAR' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', borderRadius: 8, color: showModal.type === 'PAGAR' ? 'var(--accent-red)' : 'var(--accent-green)' }}>
                   <CreditCard size={20} />
                 </div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{showModal === 'PAGAR' ? 'Novo Lançamento: A Pagar' : 'Novo Lançamento: A Receber'}</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                  {showModal.editData ? 'Editar Lançamento' : (showModal.type === 'PAGAR' ? 'Novo Lançamento: A Pagar' : 'Novo Lançamento: A Receber')}
+                </h2>
               </div>
               <button onClick={() => setShowModal(null)} className="btn btn-ghost" style={{ padding: 6, borderRadius: '50%' }}><X size={20} /></button>
             </div>
             <ContaForm 
-              tipo={showModal} 
+              tipo={showModal.type} 
+              editData={showModal.editData}
               onClose={() => setShowModal(null)} 
               onSave={() => { setShowModal(null); queryClient.invalidateQueries({ queryKey: ['contas-pagar'] }); queryClient.invalidateQueries({ queryKey: ['contas-receber'] }); }} 
             />
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!contaParaExcluir}
+        title="Excluir Lançamento"
+        description={`Deseja realmente excluir "${contaParaExcluir?.descricao}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        onConfirm={() => contaParaExcluir && excluirMutation.mutate({ conta: contaParaExcluir, tipo: contaParaExcluir.tipo })}
+        onClose={() => setContaParaExcluir(null)}
+        isLoading={excluirMutation.isPending}
+      />
     </div>
   );
 }

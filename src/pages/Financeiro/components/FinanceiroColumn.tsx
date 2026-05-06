@@ -1,13 +1,15 @@
-import { Check } from 'lucide-react';
+import { Check, Edit2, Trash2 } from 'lucide-react';
 
 interface Conta {
   id: string;
   descricao: string;
   valor: string;
   vencimento: string;
-  status: string;
+  status: 'PENDENTE' | 'PAGO' | 'RECEBIDO' | 'VENCIDO';
   fornecedor?: string;
   cliente_nome?: string;
+  observacoes?: string;
+  tipo: 'PAGAR' | 'RECEBER';
 }
 
 interface FinanceiroColumnProps {
@@ -16,15 +18,17 @@ interface FinanceiroColumnProps {
   cor: string;
   itens: Conta[];
   onBaixar: (conta: Conta) => void;
+  onEdit: (conta: Conta) => void;
+  onDelete: (conta: Conta) => void;
   isActiveMobile: boolean;
 }
 
-export default function FinanceiroColumn({ titulo, Icon, cor, itens, onBaixar, isActiveMobile }: FinanceiroColumnProps) {
+export default function FinanceiroColumn({ titulo, Icon, cor, itens, onBaixar, onEdit, onDelete, isActiveMobile }: FinanceiroColumnProps) {
   return (
     <div className={`financeiro-col ${isActiveMobile ? 'active' : ''}`} style={{ flex: 1, minWidth: 280 }}>
       {/* Estilos específicos via classes injetadas para mobile */}
       <style>{`
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
           .financeiro-col { display: none; }
           .financeiro-col.active { display: block; width: 100% !important; min-width: 100% !important; }
         }
@@ -43,14 +47,22 @@ export default function FinanceiroColumn({ titulo, Icon, cor, itens, onBaixar, i
           </div>
         )}
         {itens.map(c => (
-          <div key={c.id} className="card animate-in" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
+          <div key={`${c.tipo}-${c.id}`} className="card animate-in" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: cor }}></div>
             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: 4 }}>{c.descricao}</div>
+            
+            {c.observacoes && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--accent)', marginBottom: 8, fontStyle: 'italic', background: 'rgba(0,0,0,0.1)', padding: '4px 8px', borderRadius: 4 }}>
+                "{c.observacoes}"
+              </div>
+            )}
+
             <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <span style={{ fontWeight: 600 }}>{c.fornecedor || c.cliente_nome || 'Sem identificação'}</span>
               <span>•</span>
               <span>{new Date(c.vencimento).toLocaleDateString('pt-BR')}</span>
             </div>
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ 
                 fontWeight: 800, 
@@ -60,16 +72,35 @@ export default function FinanceiroColumn({ titulo, Icon, cor, itens, onBaixar, i
               }}>
                 R$ {parseFloat(c.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
-              {(c.status === 'PENDENTE' || c.status === 'VENCIDO') && (
+              
+              <div style={{ display: 'flex', gap: 6 }}>
                 <button 
                   className="btn btn-ghost btn-sm" 
-                  onClick={() => onBaixar(c)}
-                  style={{ gap: 4, height: 32 }}
+                  onClick={() => onDelete(c)}
+                  style={{ padding: 6, color: 'var(--accent-red)' }}
+                  title="Excluir"
                 >
-                  <Check size={14} />
-                  Baixar
+                  <Trash2 size={14} />
                 </button>
-              )}
+                <button 
+                  className="btn btn-ghost btn-sm" 
+                  onClick={() => onEdit(c)}
+                  style={{ padding: 6 }}
+                  title="Editar"
+                >
+                  <Edit2 size={14} />
+                </button>
+                {(c.status === 'PENDENTE' || c.status === 'VENCIDO') && (
+                  <button 
+                    className="btn btn-ghost btn-sm" 
+                    onClick={() => onBaixar(c)}
+                    style={{ gap: 4, height: 32, padding: '0 12px' }}
+                  >
+                    <Check size={14} />
+                    Baixar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}

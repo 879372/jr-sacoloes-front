@@ -347,16 +347,9 @@ export default function Relatorios() {
                 className="btn btn-primary"
                 style={{ flex: 1, background: 'var(--accent-red)', borderColor: 'var(--accent-red)' }}
                 onClick={() => {
-                  // Se a venda tem NFC-e emitida, exige justificativa
+                  // Se a venda tem NFC-e emitida, utiliza justificativa padrão
                   if (vendaParaCancelar!.nf_emitida) {
-                    const justificativa = prompt(
-                      'Esta venda possui NFC-e emitida. Informe a justificativa (mínimo 15 caracteres):',
-                      'Venda cancelada por desistencia do cliente ou erro de digitacao'
-                    );
-                    if (!justificativa || justificativa.length < 15) {
-                      if (justificativa !== null) toast.error('Justificativa muito curta (mínimo 15 caracteres).');
-                      return;
-                    }
+                    const justificativa = 'Venda cancelada por desistencia do cliente ou erro de digitacao';
                     cancelarVendaMutation.mutate({ id: vendaParaCancelar!.id, justificativa });
                   } else {
                     cancelarVendaMutation.mutate({ id: vendaParaCancelar!.id });

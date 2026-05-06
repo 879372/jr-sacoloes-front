@@ -3,20 +3,21 @@ import api from '../../../lib/api';
 
 interface ContaFormProps {
   tipo: 'PAGAR' | 'RECEBER';
+  editData?: any; // Pode ser tipado melhor se necessário
   onSave: () => void;
   onClose: () => void;
 }
 
-export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
+export default function ContaForm({ tipo, editData, onSave, onClose }: ContaFormProps) {
   const [form, setForm] = useState({ 
-    descricao: '', 
-    valor: '', 
-    vencimento: '', 
-    status: 'PENDENTE', 
-    observacoes: '', 
-    fornecedor_ou_cliente: '',
-    recorrente: false,
-    data_fim_recorrencia: ''
+    descricao: editData?.descricao || '', 
+    valor: editData?.valor || '', 
+    vencimento: editData?.vencimento || '', 
+    status: editData?.status || 'PENDENTE', 
+    observacoes: editData?.observacoes || '', 
+    fornecedor_ou_cliente: editData?.fornecedor || editData?.cliente_nome || '',
+    recorrente: editData?.recorrente || false,
+    data_fim_recorrencia: editData?.data_fim_recorrencia || ''
   });
 
   const handleChange = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -36,7 +37,13 @@ export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
     
     try {
       const endpoint = tipo === 'PAGAR' ? '/financeiro/contas-pagar/' : '/financeiro/contas-receber/';
-      await api.post(endpoint, payload);
+      
+      if (editData?.id) {
+        await api.patch(`${endpoint}${editData.id}/`, payload);
+      } else {
+        await api.post(endpoint, payload);
+      }
+      
       onSave();
     } catch (err) {
       console.error('Erro ao salvar conta:', err);
@@ -142,7 +149,7 @@ export default function ContaForm({ tipo, onSave, onClose }: ContaFormProps) {
           Cancelar
         </button>
         <button type="submit" className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-          Confirmar Lançamento
+          {editData ? 'Salvar Alterações' : 'Confirmar Lançamento'}
         </button>
       </div>
     </form>
