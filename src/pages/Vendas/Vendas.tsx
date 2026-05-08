@@ -71,20 +71,27 @@ export default function Vendas() {
   const [clienteTelefone, setClienteTelefone] = useState('');
   const [vendaParaCancelar, setVendaParaCancelar] = useState<{ id: number, justificativa?: string } | null>(null);
 
-  const { data: vendas, isLoading } = useQuery<Venda[]>({
-    queryKey: ['vendas', searchTerm, statusFilter, dateRange],
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['vendas', searchTerm, statusFilter, dateRange, page],
     queryFn: async () => {
       const resp = await api.get('/vendas/', { 
         params: { 
           q: searchTerm, 
           status: statusFilter || undefined,
           data_inicio: dateRange.start,
-          data_fim: dateRange.end
+          data_fim: dateRange.end,
+          page
         } 
       });
-      return resp.data.results || resp.data;
+      return resp.data;
     }
   });
+
+  const vendas: Venda[] = data?.results || (Array.isArray(data) ? data : []);
+  const totalItems = data?.count || 0;
+  const totalPages = Math.ceil(totalItems / 50) || 1;
 
   const cancelarMutation = useMutation({
     mutationFn: ({ id, justificativa }: { id: number, justificativa?: string }) => 
@@ -237,7 +244,7 @@ export default function Vendas() {
                 className="input" 
                 placeholder="Buscar..." 
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
               />
             </div>
           </div>
@@ -248,7 +255,7 @@ export default function Vendas() {
               type="date" 
               className="input" 
               value={dateRange.start} 
-              onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} 
+              onChange={e => { setDateRange(prev => ({ ...prev, start: e.target.value })); setPage(1); }} 
             />
           </div>
 
@@ -258,7 +265,7 @@ export default function Vendas() {
               type="date" 
               className="input" 
               value={dateRange.end} 
-              onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} 
+              onChange={e => { setDateRange(prev => ({ ...prev, end: e.target.value })); setPage(1); }} 
             />
           </div>
 
@@ -267,7 +274,7 @@ export default function Vendas() {
             <select 
               className="select" 
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
             >
               <option value="">Todos</option>
               <option value="FINALIZADA">Finalizadas</option>
@@ -341,6 +348,26 @@ export default function Vendas() {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, padding: '16px', borderTop: '1px solid var(--border)' }}>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              disabled={page === 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              Anterior
+            </button>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Página {page} de {totalPages}</span>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              disabled={page === totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              Próxima
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL DE DETALHES */}
