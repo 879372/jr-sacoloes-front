@@ -122,7 +122,7 @@ export default function Vendas() {
       }
     },
     onError: (err: any) => {
-      const msg = err.response?.data?.mensagem_sefaz || err.response?.data?.detail || 'Erro ao comunicar com a SEFAZ.';
+      const msg = err.response?.data?.erro || err.response?.data?.mensagem_sefaz || err.response?.data?.detail || 'Erro ao comunicar com a SEFAZ.';
       toast.error(msg);
     }
   });
@@ -322,7 +322,7 @@ export default function Vendas() {
                         </div>
                     </td>
                     <td style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
-                      R$ {formatCurrency(v.total)}
+                      R$ {formatCurrency(Number(v.total) - Number(v.desconto || 0))}
                     </td>
                     <td>
                       {v.nf_emitida ? (
@@ -418,7 +418,14 @@ export default function Vendas() {
                   </div>
                   <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: 20, borderRadius: 16, border: '1px solid rgba(59, 130, 246, 0.1)' }}>
                      <div className="kpi-label" style={{ color: 'var(--accent)' }}>Total da Transação</div>
-                     <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-primary)' }}>R$ {formatCurrency(selectedVenda.total)}</div>
+                     <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-primary)' }}>
+                        R$ {formatCurrency(Number(selectedVenda.total) - Number(selectedVenda.desconto || 0))}
+                     </div>
+                     {(selectedVenda.desconto || 0) > 0 && (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                          Subtotal: R$ {formatCurrency(selectedVenda.total)} | Desconto: -R$ {formatCurrency(selectedVenda.desconto)}
+                        </div>
+                     )}
                      <div style={{ marginTop: 8 }}>{getStatusBadge(selectedVenda.status)}</div>
                   </div>
                </div>
