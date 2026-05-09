@@ -48,8 +48,8 @@ export default function Compras() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState({ 
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], // Início do mês
-    end: new Date().toISOString().split('T')[0] 
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('sv-SE'), // Início do mês
+    end: new Date().toLocaleDateString('sv-SE') 
   });
   
   const [form, setForm] = useState({ 
@@ -137,7 +137,7 @@ export default function Compras() {
             numero_nf: doc.numero || '', 
             fornecedor: doc.nome_emitente || doc.xNome || 'Fornecedor Desconhecido',
             cnpj_fornecedor: doc.documento_emitente || doc.CNPJ || '',
-            data_emissao: doc.data_emissao || doc.dhEmi || new Date().toISOString(),
+            data_emissao: doc.data_emissao || doc.dhEmi || new Date().toLocaleDateString('sv-SE'),
             valor_total: parseFloat(doc.valor_total || doc.vNF || '0'),
             chave_acesso: doc.chave_acesso || doc.chNFe,
             status: 'PENDENTE',

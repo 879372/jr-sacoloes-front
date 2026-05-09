@@ -63,8 +63,8 @@ export default function Vendas() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateRange, setDateRange] = useState({ 
-    start: new Date().toISOString().split('T')[0], 
-    end: new Date().toISOString().split('T')[0] 
+    start: new Date().toLocaleDateString('sv-SE'), 
+    end: new Date().toLocaleDateString('sv-SE') 
   });
   const [selectedVenda, setSelectedVenda] = useState<Venda | null>(null);
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
@@ -111,14 +111,17 @@ export default function Vendas() {
   const emitirNFCeMutation = useMutation({
     mutationFn: (id: number) => api.post(`/vendas/${id}/emitir-nfce/`),
     onSuccess: (resp) => {
-      if (resp.data.status === 'error' || resp.data.erro || resp.data.mensagem_sefaz) {
+      const isAuthorized = resp.data.nf_status === 'AUTORIZADA' || resp.data.status === 'autorizada' || (resp.data.mensagem_sefaz && resp.data.mensagem_sefaz.toLowerCase().includes('autorizado'));
+
+      if (!isAuthorized && (resp.data.status === 'error' || resp.data.erro)) {
         const msg = resp.data.mensagem_sefaz || resp.data.erro || resp.data.mensagem;
         toast.error(`Erro: ${msg}`);
       } else {
         toast.success('NFC-e autorizada!');
-        if (resp.data.url_pdf) window.open(resp.data.url_pdf, '_blank');
+        if (resp.data.nf_url_pdf) window.open(resp.data.nf_url_pdf, '_blank');
         queryClient.invalidateQueries({ queryKey: ['vendas'] });
-        setSelectedVenda(null);
+        // Atualiza a venda selecionada com os dados novos (para habilitar WhatsApp no modal)
+        setSelectedVenda(resp.data);
       }
     },
     onError: (err: any) => {
@@ -372,7 +375,7 @@ export default function Vendas() {
 
       {/* MODAL DE DETALHES */}
       {selectedVenda && (
-        <div className="modal-overlay" onClick={() => setSelectedVenda(null)}>
+        <div className="modal-overlay" style={{ zIndex: 1000 }} onClick={() => setSelectedVenda(null)}>
           <div className="card animate-in" style={{ width: '100%', maxWidth: 1000, padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
               <div style={{ flex: 1 }}>
@@ -506,7 +509,7 @@ export default function Vendas() {
       )}
 
       {showWhatsappModal && (
-        <div className="modal-overlay" style={{ zIndex: 1200 }}>
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
           <div className="card animate-in" style={{ maxWidth: 450, width: '90%', padding: 32, textAlign: 'center' }}>
             <div style={{ padding: 12, background: 'rgba(34, 197, 94, 0.1)', borderRadius: '50%', color: 'var(--accent-green)', width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <Smartphone size={28} />

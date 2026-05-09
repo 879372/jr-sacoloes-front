@@ -51,7 +51,7 @@ export default function Relatorios() {
 
   // Filtros de Data
   const now = new Date();
-  const currentMonthStr = now.toISOString().slice(0, 7); // YYYY-MM
+  const currentMonthStr = now.toLocaleDateString('sv-SE').slice(0, 7); // YYYY-MM
   const [mesInicio, setMesInicio] = useState(currentMonthStr);
   const [mesFim, setMesFim] = useState(currentMonthStr);
 

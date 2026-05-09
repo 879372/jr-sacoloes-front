@@ -35,7 +35,7 @@ export default function Financeiro() {
   const [showModal, setShowModal] = useState<{ type: 'PAGAR' | 'RECEBER', editData?: Conta } | null>(null);
   const [contaParaExcluir, setContaParaExcluir] = useState<Conta | null>(null);
   const [activeTab, setActiveTab] = useState<'vencidos' | 'pagar' | 'receber' | 'pagos' | 'recebidos'>('vencidos');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleDateString('sv-SE').slice(0, 7)); // YYYY-MM
   const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch Contas a Pagar
@@ -62,7 +62,7 @@ export default function Financeiro() {
   const baixarMutation = useMutation({
     mutationFn: async ({ conta, tipo }: { conta: Conta, tipo: 'PAGAR' | 'RECEBER' }) => {
       const endpoint = tipo === 'PAGAR' ? `/financeiro/contas-pagar/${conta.id}/` : `/financeiro/contas-receber/${conta.id}/`;
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = new Date().toLocaleDateString('sv-SE');
       return api.patch(endpoint, {
         status: tipo === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
         ...(tipo === 'PAGAR' ? { data_pagamento: hoje } : { data_recebimento: hoje }),
