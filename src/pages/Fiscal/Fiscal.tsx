@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Archive,
   X,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 
 interface FiscalDoc {
@@ -53,35 +54,48 @@ export default function Fiscal() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [notaParaCancelar, setNotaParaCancelar] = useState<any | null>(null);
 
-  const { data: notas = [], isLoading, refetch: refetchNotas, isFetching } = useQuery<any[]>({
-    queryKey: ['fiscal-docs', activeTab, periodo],
-    staleTime: 0, // Garante que os dados sejam considerados "velhos" imediatamente para forçar refetch
-    gcTime: 0,    // Remove do cache ao desmontar ou trocar key
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading, refetch: refetchNotas, isFetching } = useQuery({
+    queryKey: ['fiscal-docs', activeTab, periodo, page],
+    staleTime: 0,
+    gcTime: 0,
     queryFn: async () => {
       const resp = await api.get('/vendas/', { 
         params: { 
           fiscal: true, 
           nf_tipo: activeTab,
           data_inicio: periodo.de,
-          data_fim: periodo.ate
+          data_fim: periodo.ate,
+          page: page
         } 
       });
-      const results = resp.data.results || resp.data;
-      return results.map((v: any) => ({
-        id: v.id,
-        ref: v.id.toString(),
-        numero: v.nf_numero,
-        chave_nfe: v.nf_chave,
-        cliente_nome: v.cliente_nome,
-        venda_total: v.total,
-        status: v.nf_status?.toLowerCase() || 'pendente',
-        tipo: v.nf_tipo || 'nfce',
-        created_at: v.data,
-        nf_url_pdf: v.nf_url_pdf,
-        nf_mensagem: v.nf_mensagem
-      }));
+      
+      const rawResults = resp.data.results || (Array.isArray(resp.data) ? resp.data : []);
+      const count = resp.data.count || rawResults.length;
+
+      return {
+        count,
+        results: rawResults.map((v: any) => ({
+          id: v.id,
+          ref: v.id.toString(),
+          numero: v.nf_numero,
+          chave_nfe: v.nf_chave,
+          cliente_nome: v.cliente_nome,
+          venda_total: v.total,
+          status: v.nf_status?.toLowerCase() || 'pendente',
+          tipo: v.nf_tipo || 'nfce',
+          created_at: v.data,
+          nf_url_pdf: v.nf_url_pdf,
+          nf_mensagem: v.nf_mensagem
+        }))
+      };
     }
   });
+
+  const notas = data?.results || [];
+  const totalCount = data?.count || 0;
+  const totalPages = Math.ceil(totalCount / 50);
 
   const { data: vendasPendentes = [], refetch: refetchVendas } = useQuery<any[]>({
     queryKey: ['vendas-pendentes-nota', filtroVenda],
@@ -324,6 +338,30 @@ export default function Fiscal() {
                  })}
                </tbody>
              </table>
+
+             {totalPages > 1 && (
+                <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Mostrando página <strong>{page}</strong> de {totalPages} ({totalCount} registros)
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button 
+                      className="btn btn-ghost btn-sm" 
+                      disabled={page === 1} 
+                      onClick={() => { setPage(p => p - 1); window.scrollTo(0,0); }}
+                    >
+                      <ChevronLeft size={16} /> Anterior
+                    </button>
+                    <button 
+                      className="btn btn-ghost btn-sm" 
+                      disabled={page === totalPages} 
+                      onClick={() => { setPage(p => p + 1); window.scrollTo(0,0); }}
+                    >
+                      Próxima <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+             )}
           </div>
         )}
       </div>
