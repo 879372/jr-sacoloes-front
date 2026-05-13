@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [build.env]
-NIXPACKS_NODE_VERSION = "20"
+NIXPACKS_NODE_VERSION = "22"
 
 [deploy]
 startCommand = "npm run preview -- --port $PORT --host"
